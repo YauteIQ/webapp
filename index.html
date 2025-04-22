@@ -85,7 +85,208 @@
          .maplibregl-ctrl-grid-toggle span:not(.active):hover {
              background-color: #f4f4f4;
          }
+        /* Style for the page body to prevent scrolling when modal is open (optional) */
+        body.modal-open {
+            overflow: hidden;
+        }
+
+        /* Full screen overlay */
+        #consent-overlay {
+            position: fixed; /* Cover the entire viewport */
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black background */
+            z-index: 999; /* Below the modal, above other content */
+            display: none; /* Hidden by default */
+            justify-content: center; /* Center horizontally */
+            align-items: center; /* Center vertically */
+            padding: 20px; /* Add padding for smaller screens */
+            box-sizing: border-box;
+        }
+
+        /* The actual modal box */
+        #consent-banner {
+            /* Remove previous fixed positioning and full width */
+            background-color: #ffffff; /* White background for the box */
+            color: #333;
+            padding: 25px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); /* Modal shadow */
+            z-index: 1000; /* Ensure modal is above the overlay */
+            text-align: center;
+            max-width: 500px; /* Max width of the modal */
+            width: 100%;     /* Take available width up to max-width */
+            box-sizing: border-box;
+            /* display: block; // Not needed, flex item default */
+            position: relative; /* Needed if you want to position elements inside absolutely */
+        }
+
+        #consent-banner p {
+            margin: 0 0 20px 0; /* More spacing below text */
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        /* Optional wrapper for buttons if you want specific layout */
+        .consent-buttons {
+            display: flex;
+            justify-content: center; /* Center buttons */
+            gap: 15px; /* Space between buttons */
+            flex-wrap: wrap; /* Allow buttons to wrap on small screens */
+        }
+
+        #consent-banner button {
+            padding: 10px 20px; /* Slightly larger buttons */
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            min-width: 100px; /* Minimum width for buttons */
+            /* Remove margin if using gap in flex container */
+        }
+
+        #consent-banner #consent-accept {
+            background-color: #84d287; /* Green */
+            color: white;
+            order: 1; /* Optional: Control button order */
+        }
+
+        #consent-banner #consent-deny {
+            background-color: #f67269; /* Red */
+            color: white;
+            order: 2; /* Optional: Control button order */
+        }
+
     </style>
+    <script>  
+        // script.js
+
+document.addEventListener('DOMContentLoaded', function() {
+
+// --- Configuration ---
+const GA4_TRACKING_ID = 'G-MP2YQKFTLE';
+// Key for storing the user's choice in the browser's local storage
+const CONSENT_KEY = 'user_consent_analytics_v1';
+
+// --- DOM Element References ---
+// Get references to the necessary HTML elements
+const consentOverlay = document.getElementById('consent-overlay');
+const consentBanner = document.getElementById('consent-banner'); // Modal box itself
+const acceptButton = document.getElementById('consent-accept');
+const denyButton = document.getElementById('consent-deny');
+
+// --- Essential Functions ---
+
+/**
+ * Loads the Google Analytics scripts (GA4 and optionally UA).
+ * This function is called only *after* consent is granted.
+ */
+function loadGoogleAnalytics() {
+
+    // --- GA4 (gtag.js) - Recommended ---
+    if (GA4_TRACKING_ID && GA4_TRACKING_ID !== 'G-XXXXXXXXXX') {
+        // Create the GA4 script tag
+        const ga4Script = document.createElement('script');
+        ga4Script.async = true;
+        ga4Script.src = `https://www.googletagmanager.com/gtag/js?id=${GA4_TRACKING_ID}`;
+        // Add the script tag to the <head> of the document
+        document.head.appendChild(ga4Script);
+
+        // Initialize the dataLayer and gtag function for GA4
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        // Configure GA4 with the provided tracking ID
+        gtag('config', GA4_TRACKING_ID);
+        console.log(`GA4 configured with ID: ${GA4_TRACKING_ID}`);
+    } else {
+         console.log("GA4 Tracking ID not provided");
+    }
+}
+
+/**
+ * Hides the consent overlay and modal box.
+ * Also re-enables scrolling on the main page content.
+ */
+function hideConsentUI() {
+    if (consentOverlay) {
+        consentOverlay.style.display = 'none'; // Hide the overlay
+        // Allow the body to scroll again
+        document.body.classList.remove('modal-open');
+    }
+}
+
+ /**
+  * Shows the consent overlay and modal box.
+  * Also prevents scrolling on the main page content.
+  */
+function showConsentUI() {
+     if (consentOverlay) {
+        // Show the overlay using flex display for centering
+        consentOverlay.style.display = 'flex';
+        // Prevent the body from scrolling while the modal is open
+        document.body.classList.add('modal-open');
+    }
+}
+
+/**
+ * Handles the user clicking the "Accept" button.
+ * Stores the consent choice, hides the UI, and loads GA.
+ */
+function grantConsent() {
+    // Store the choice in local storage
+    localStorage.setItem(CONSENT_KEY, 'granted');
+    // Hide the modal and overlay
+    hideConsentUI();
+    // Load Google Analytics scripts
+    loadGoogleAnalytics();
+}
+
+/**
+ * Handles the user clicking the "Deny" button.
+ * Stores the consent choice and hides the UI. Does NOT load GA.
+ */
+function denyConsent() {
+    // Store the choice in local storage
+    localStorage.setItem(CONSENT_KEY, 'denied');
+    // Hide the modal and overlay
+    hideConsentUI();
+    // Analytics scripts are NOT loaded
+}
+
+// --- Initialization Logic ---
+
+// First, check if all necessary HTML elements are present
+if (!consentOverlay || !consentBanner || !acceptButton || !denyButton) {
+    console.error("Consent UI HTML elements not found. Cannot initialize consent logic.");
+    // Stop execution if elements are missing
+    return;
+}
+
+// Check if a consent decision has already been stored from a previous visit
+const savedConsent = localStorage.getItem(CONSENT_KEY);
+
+// --- Decision Logic ---
+if (savedConsent === 'granted') {
+    // If consent was already granted, load GA immediately
+    loadGoogleAnalytics();
+    hideConsentUI();
+} else if (savedConsent === 'denied') {
+    hideConsentUI();
+} else {
+    // If no decision is stored ('null'), show the consent modal
+    showConsentUI();
+
+    // Add event listeners to the buttons - only needed if the banner is shown
+    acceptButton.addEventListener('click', grantConsent);
+    denyButton.addEventListener('click', denyConsent);
+}
+
+});
+
+    </script>
 </head>
 <body>
     <div id="map"></div>
@@ -97,10 +298,22 @@
       <button id="copyButton">Click to copy</button>
     </div>
 
+    <div id="consent-overlay"> 
+        <div id="consent-banner">
+            <p>
+                Hey, can I load <strong>Google Analytics</strong> here? I'm just curious
+                to see how much this is used. No other tracking cookies, I promise 😀.
+            </p>
+            <div class="consent-buttons"> <button id="consent-accept">Sure! 👌</button>
+                <button id="consent-deny">No thanks 🫥</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- Configuration ---
         const MIN_GRID_ZOOM = 11; // Min map zoom to display grid overlay
-        const MAPTILER_API_KEY = "XJ5Qfbph9VES5QjJGNjF";
+        const MAPTILER_API_KEY = "5xvmU2oirJBc6iLf4Q2Y";
 
         // --- State Management ---
         let selectedTiles = {}; // Key: tileId (z14/z17), Value: { name, sw, ne, selected, uniqueId }
