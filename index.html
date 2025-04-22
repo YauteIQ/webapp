@@ -100,7 +100,7 @@
     <script>
         // --- Configuration ---
         const MIN_GRID_ZOOM = 11; // Min map zoom to display grid overlay
-        const MAPTILER_API_KEY = "XJ5Qfbph9VES5QjJGNjF"; // <-- IMPORTANT: Replace with your key!
+        const MAPTILER_API_KEY = "XJ5Qfbph9VES5QjJGNjF";
 
         // --- State Management ---
         let selectedTiles = {}; // Key: tileId (z14/z17), Value: { name, sw, ne, selected, uniqueId }
@@ -112,8 +112,6 @@
         // --- Map Initialization ---
         const map = new maplibregl.Map({
             container: 'map',
-            // Replace with your desired style from MapTiler, Stadia, etc.
-            // Ensure the provider allows usage for your purpose.
             style: `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_API_KEY}`,
             center: [2.2945, 48.8584], // MapLibre uses [Lon, Lat] - User's Paris view
             zoom: 9 // User's initial zoom (10)
@@ -130,14 +128,14 @@
         });
         map.addControl(geolocate, 'top-left');
 
-        // --- Calculation Functions (Mostly Unchanged) ---
+        // --- Calculation Functions ---
         function deg2rad(d) { return d * Math.PI / 180; }
         function rad2deg(r) { return r * 180 / Math.PI; }
         function yTileToLatDeg(y, z) { const n = Math.pow(2, z); const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))); return rad2deg(latRad); }
         function xTileToLonDeg(x, z) { const n = Math.pow(2, z); return x / n * 360.0 - 180.0; }
         function lonDegToXTile(lon, z) { const n = Math.pow(2, z); const xTile = Math.floor((lon + 180) / 360 * n); return (lon === 180) ? n - 1 : xTile; }
         function latDegToYTile(lat, z) { const n = Math.pow(2, z); const latClamped = Math.max(-85.05112878, Math.min(85.05112878, lat)); const latRad = deg2rad(latClamped); const yTile = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n); return (yTile >= n) ? n - 1 : yTile; }
-        // MODIFIED: getTileBounds now returns simple object with sw/ne arrays [lat, lon]
+
         function getTileBounds(x, y, z) {
             const lat_ne = yTileToLatDeg(y, z);
             const lon_sw = xTileToLonDeg(x, z);
@@ -171,8 +169,8 @@
                 });
             }
             // Horizontal lines (Latitude)
-            const yMin = latDegToYTile(north, displayZ); // Note: North lat gives smaller Y tile index
-            const yMax = latDegToYTile(south, displayZ); // South lat gives larger Y tile index
+            const yMin = latDegToYTile(north, displayZ);
+            const yMax = latDegToYTile(south, displayZ);
             for (let y = yMin; y <= yMax + 1; y++) {
                 const lat = yTileToLatDeg(y, displayZ);
                  // Create LineString feature: [[west, lat], [east, lat]] (Lon, Lat order)
@@ -210,7 +208,7 @@
 
         // --- Grid Drawing Function (MapLibre) ---
         function drawGrid() {
-            const currentZoom = map.getZoom(); // MapLibre zoom levels are float
+            const currentZoom = map.getZoom();
             const source = map.getSource('grid-source');
 
             if (currentZoom >= MIN_GRID_ZOOM - 0.5) { // Use threshold slightly below integer zoom
@@ -239,8 +237,6 @@
             } else {
                  // Hide grid layer if below zoom threshold
                  if(map.getLayer('grid-layer')) { map.setLayoutProperty('grid-layer', 'visibility', 'none');}
-                 // Optional: Clear data if source exists? Or just hide layer. Hiding is simpler.
-                 // if (source) { source.setData({ type: 'FeatureCollection', features: [] }); }
             }
         }
 
@@ -278,7 +274,7 @@
 
 
         // --- Update Output String Display ---
-        function updateOutputString() { /* ... No changes needed here ... */
+        function updateOutputString() {
             const outputElement = document.getElementById('outputString');
             if (!outputElement) return;
             const outputItems = [];
@@ -303,7 +299,7 @@
 
 
         // --- Interaction Functions ---
-        function saveTileName(tileId) { /* ... No changes needed here ... */
+        function saveTileName(tileId) {
             const inputElement = document.getElementById('tileNameInput_' + tileId);
             const tileName = inputElement ? inputElement.value.trim() : 'Unnamed';
             const tileData = selectedTiles[tileId];
@@ -317,7 +313,7 @@
             updateOutputString();
         }
 
-        function deselectTile(tileId) { /* ... No changes needed here ... */
+        function deselectTile(tileId) {
              if (selectedTiles[tileId]) {
                  selectedTiles[tileId].selected = false;
                  const index = selectedTileOrder.indexOf(tileId);
