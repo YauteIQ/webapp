@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapLibre Web Mercator Grid (Z14/Z17)</title> <link href='https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src='https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js'></script>
+    <style>
+        /* Basic styling */
+        html, body {
+            height: 100%; width: 100%; margin: 0; padding: 0;
+            font-family: sans-serif; display: flex; flex-direction: column; overflow: hidden;
+        }
+        #map { flex-grow: 1; width: 100%; background-color: #f0f0f0; }
+        #bottombar {
+            height: auto; min-height: 100px; width: 100%; overflow-y: auto;
+            padding: 5px 10px; box-sizing: border-box; border-top: 1px solid #ccc;
+            background-color: #f8f9fa; display: flex; flex-direction: column;
+        }
+        #bottombar span { font-size: 0.85em; line-height: 1.4; margin-bottom: 5px; }
+        #outputString {
+            width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 3px;
+            font-family: monospace; font-size: 0.8em; resize: none; white-space: pre;
+            overflow-wrap: normal; overflow-x: auto; margin-bottom: 5px;
+        }
+        #copyButton {
+            padding: 5px 10px; font-size: 0.9em; cursor: pointer; background-color: #6c757d;
+            color: white; border: none; border-radius: 3px; align-self: flex-start;
+        }
+        #copyButton:hover { background-color: #5a6268; }
+        #copyButton.copied { background-color: #28a745; }
+
+        /* Popup styling (MapLibre specific class) */
+        .maplibregl-popup-content {
+             padding: 10px; font-size: 1em; max-width: 220px !important; /* Increase max-width slightly */
+             word-wrap: break-word; border-radius: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+             line-height: 1.4; /* Adjust line spacing */
+        }
+        /* Custom class for our naming popup */
+        .naming-popup-content { margin: 0; } /* Reset margin if needed */
+        .naming-popup-content div { margin-bottom: 5px; } /* Spacing */
+        .naming-popup-content b { display: block; margin-bottom: 3px; } /* Tile ID bold */
+        .naming-popup-content input[type="text"] { width: calc(100% - 12px); padding: 5px; margin-bottom: 8px; border: 1px solid #ccc; border-radius: 3px; box-sizing: border-box; }
+        .naming-popup-content button { padding: 5px 10px; border: none; background-color: #28a745; color: white; border-radius: 3px; cursor: pointer; margin-right: 5px; }
+        .naming-popup-content button:hover { background-color: #218838; }
+        .naming-popup-content button.deselect-button { background-color: #dc3545; }
+        .naming-popup-content button.deselect-button:hover { background-color: #c82333; }
+
+        /* Grid Toggle Control Styling (using MapLibre conventions where possible) */
+         .maplibregl-ctrl-bottom-left .maplibregl-ctrl { /* Target controls in bottom-left */
+             margin-bottom: 50px; /* Add some margin */
+             clear: none; /* Override default clear */
+         }
+        .maplibregl-ctrl-grid-toggle { /* Custom class for the control container */
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 15px; /* User's radius */
+            box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+            display: flex;
+            cursor: pointer;
+            border: 1px solid #ccc; /* Add slight border like other controls */
+            line-height: 1; /* Prevent extra space */
+        }
+        .maplibregl-ctrl-grid-toggle span {
+            padding: 6px 10px;
+            font-size: 12px; /* Match typical MapLibre control font size */
+            text-align: center;
+            color: #333;
+            white-space: nowrap;
+            user-select: none; /* Prevent text selection */
+        }
+        .maplibregl-ctrl-grid-toggle span:first-child {
+             border-top-left-radius: 14px; /* Adjust for border */
+             border-bottom-left-radius: 14px;
+             border-right: 1px solid #ccc; /* Separator */
+        }
+         .maplibregl-ctrl-grid-toggle span:last-child {
+             border-top-right-radius: 14px;
+             border-bottom-right-radius: 14px;
+         }
+        .maplibregl-ctrl-grid-toggle span.active {
+            background-color: #007bff;
+            color: white;
+            font-weight: bold;
+        }
+         .maplibregl-ctrl-grid-toggle span:not(.active):hover {
+             background-color: #f4f4f4;
+         }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div id="bottombar">
+      <span><strong>How to sync the tiles:</strong><br></span>
+      <span>- Select and name your tiles<br>- Copy the text below<br>- Open TileIQ settings in Garmin Connect<br>- Paste this text and sync your device</span>
+      <textarea id="outputString" readonly rows="2"></textarea>
+      <button id="copyButton">Click to copy</button>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const MIN_GRID_ZOOM = 11; // Min map zoom to display grid overlay
+        const MAPTILER_API_KEY = "XJ5Qfbph9VES5QjJGNjF"; // <-- IMPORTANT: Replace with your key!
+
+        // --- State Management ---
+        let selectedTiles = {}; // Key: tileId (z14/z17), Value: { name, sw, ne, selected, uniqueId }
+        let selectedTileOrder = []; // Order of selection
+        let gridDisplayZoomLevel = 14; // Current grid/selection level
+        let nextTileUniqueId = 1; // Counter for persistent IDs
+        let currentPopup = null; // Reference to the currently open MapLibre popup
+
+        // --- Map Initialization ---
+        const map = new maplibregl.Map({
+            container: 'map',
+            // Replace with your desired style from MapTiler, Stadia, etc.
+            // Ensure the provider allows usage for your purpose.
+            style: `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_API_KEY}`,
+            center: [2.2945, 48.8584], // MapLibre uses [Lon, Lat] - User's Paris view
+            zoom: 9 // User's initial zoom (10)
+        });
+
+        // --- Add Map Controls ---
+        map.addControl(new maplibregl.NavigationControl(), 'top-left');
+        map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+        // Use MapLibre's GeolocateControl
+        const geolocate = new maplibregl.GeolocateControl({
+             positionOptions: { enableHighAccuracy: true },
+             trackUserLocation: false, // Set true to continuously track
+             showUserHeading: true
+        });
+        map.addControl(geolocate, 'top-left');
+
+        // --- Calculation Functions (Mostly Unchanged) ---
+        function deg2rad(d) { return d * Math.PI / 180; }
+        function rad2deg(r) { return r * 180 / Math.PI; }
+        function yTileToLatDeg(y, z) { const n = Math.pow(2, z); const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))); return rad2deg(latRad); }
+        function xTileToLonDeg(x, z) { const n = Math.pow(2, z); return x / n * 360.0 - 180.0; }
+        function lonDegToXTile(lon, z) { const n = Math.pow(2, z); const xTile = Math.floor((lon + 180) / 360 * n); return (lon === 180) ? n - 1 : xTile; }
+        function latDegToYTile(lat, z) { const n = Math.pow(2, z); const latClamped = Math.max(-85.05112878, Math.min(85.05112878, lat)); const latRad = deg2rad(latClamped); const yTile = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n); return (yTile >= n) ? n - 1 : yTile; }
+        // MODIFIED: getTileBounds now returns simple object with sw/ne arrays [lat, lon]
+        function getTileBounds(x, y, z) {
+            const lat_ne = yTileToLatDeg(y, z);
+            const lon_sw = xTileToLonDeg(x, z);
+            const lat_sw = yTileToLatDeg(y + 1, z);
+            const lon_ne = xTileToLonDeg(x + 1, z);
+            // Return simple structure, Leaflet bounds object no longer needed
+            return { sw: [lat_sw, lon_sw], ne: [lat_ne, lon_ne] };
+        }
+        function generateTileId(x, y, z) { return `z${z}-${x}-${y}`; }
+
+        // --- GeoJSON Generation ---
+        // Function to generate GeoJSON for grid lines
+        function generateGridGeoJson(bounds, displayZ) {
+            const features = [];
+            const tileCountZ = Math.pow(2, displayZ);
+            const degPerTileLonZ = 360 / tileCountZ;
+
+            const west = bounds.getWest(); const east = bounds.getEast();
+            const south = bounds.getSouth(); const north = bounds.getNorth();
+
+            // Vertical lines (Longitude)
+            const kMinLon = Math.floor((west + 180) / degPerTileLonZ);
+            const kMaxLon = Math.ceil((east + 180) / degPerTileLonZ);
+            for (let k = kMinLon; k <= kMaxLon; k++) {
+                const lon = xTileToLonDeg(k, displayZ);
+                // Create LineString feature: [[lon, south], [lon, north]] (Lon, Lat order)
+                features.push({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: [[lon, south], [lon, north]] },
+                    properties: {}
+                });
+            }
+            // Horizontal lines (Latitude)
+            const yMin = latDegToYTile(north, displayZ); // Note: North lat gives smaller Y tile index
+            const yMax = latDegToYTile(south, displayZ); // South lat gives larger Y tile index
+            for (let y = yMin; y <= yMax + 1; y++) {
+                const lat = yTileToLatDeg(y, displayZ);
+                 // Create LineString feature: [[west, lat], [east, lat]] (Lon, Lat order)
+                 features.push({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: [[west, lat], [east, lat]] },
+                    properties: {}
+                });
+            }
+            return { type: 'FeatureCollection', features: features };
+        }
+
+        // Function to generate GeoJSON for selected tile highlights
+        function generateHighlightGeoJson() {
+            const features = [];
+            selectedTileOrder.forEach(tileId => {
+                const tile = selectedTiles[tileId];
+                if (tile && tile.selected && tile.sw && tile.ne) {
+                    const minLat = tile.sw[0]; const minLon = tile.sw[1];
+                    const maxLat = tile.ne[0]; const maxLon = tile.ne[1];
+                    // Create Polygon feature: needs closed loop in [Lon, Lat] order
+                    const coordinates = [
+                        [ [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat] ]
+                    ];
+                    features.push({
+                        type: 'Feature',
+                        geometry: { type: 'Polygon', coordinates: coordinates },
+                        properties: { tileId: tileId } // Include ID if needed later
+                    });
+                }
+            });
+            return { type: 'FeatureCollection', features: features };
+        }
+
+
+        // --- Grid Drawing Function (MapLibre) ---
+        function drawGrid() {
+            const currentZoom = map.getZoom(); // MapLibre zoom levels are float
+            const source = map.getSource('grid-source');
+
+            if (currentZoom >= MIN_GRID_ZOOM - 0.5) { // Use threshold slightly below integer zoom
+                // Use MapLibre's getBounds()
+              const bounds = map.getBounds();
+              const geojsonData = generateGridGeoJson(bounds, gridDisplayZoomLevel);
+
+                if (source) {
+                    source.setData(geojsonData); // Update existing source
+                } else if (map.isStyleLoaded()) { // Check if style is loaded before adding
+                    map.addSource('grid-source', { type: 'geojson', data: geojsonData });
+                    map.addLayer({
+                        id: 'grid-layer',
+                        type: 'line',
+                        source: 'grid-source',
+                        paint: {
+                            'line-color': '#FF0000',
+                            'line-width': 0.5,
+                            'line-opacity': 0.6
+                        }
+                    });
+                }
+                 // Make sure layer is visible if it exists
+                 if(map.getLayer('grid-layer')) { map.setLayoutProperty('grid-layer', 'visibility', 'visible');}
+
+            } else {
+                 // Hide grid layer if below zoom threshold
+                 if(map.getLayer('grid-layer')) { map.setLayoutProperty('grid-layer', 'visibility', 'none');}
+                 // Optional: Clear data if source exists? Or just hide layer. Hiding is simpler.
+                 // if (source) { source.setData({ type: 'FeatureCollection', features: [] }); }
+            }
+        }
+
+        // --- Selected Tile Highlighting (MapLibre) ---
+        function redrawSelectedHighlights() {
+            const source = map.getSource('highlight-source');
+            const geojsonData = generateHighlightGeoJson();
+
+            if (source) {
+                source.setData(geojsonData); // Update existing source
+            } else if (map.isStyleLoaded()) { // Check if style is loaded
+                map.addSource('highlight-source', { type: 'geojson', data: geojsonData });
+                // Add Fill layer
+                map.addLayer({
+                    id: 'highlight-fill-layer',
+                    type: 'fill',
+                    source: 'highlight-source',
+                    paint: {
+                        'fill-color': '#007bff',
+                        'fill-opacity': 0.3
+                    }
+                });
+                // Add Outline layer
+                 map.addLayer({
+                    id: 'highlight-outline-layer',
+                    type: 'line',
+                    source: 'highlight-source',
+                    paint: {
+                        'line-color': '#0056b3',
+                        'line-width': 1
+                    }
+                });
+            }
+        }
+
+
+        // --- Update Output String Display ---
+        function updateOutputString() { /* ... No changes needed here ... */
+            const outputElement = document.getElementById('outputString');
+            if (!outputElement) return;
+            const outputItems = [];
+            selectedTileOrder.forEach(tileId => {
+                const tile = selectedTiles[tileId];
+                if (tile && tile.selected && tile.hasOwnProperty('uniqueId')) {
+                    const lon_sw_orig = tile.sw[1]; const lat_sw_orig = tile.sw[0];
+                    const lon_ne_orig = tile.ne[1]; const lat_ne_orig = tile.ne[0];
+                    const factor = 1e8;
+                    const lon_sw = Math.trunc(lon_sw_orig * factor) / factor;
+                    const lat_sw = Math.trunc(lat_sw_orig * factor) / factor;
+                    const lon_ne = Math.trunc(lon_ne_orig * factor) / factor;
+                    const lat_ne = Math.trunc(lat_ne_orig * factor) / factor;
+                    const label = tile.name || 'Unnamed';
+                    const itemString = `${tile.uniqueId}^${label}^${lon_sw}^${lat_sw}^${lon_ne}^${lat_ne}`;
+                    outputItems.push(itemString);
+                } else if (tile && tile.selected) { console.warn(`Tile ${tileId} selected but missing uniqueId!`); }
+            });
+            const outputString = outputItems.join('|');
+            outputElement.value = outputString;
+        }
+
+
+        // --- Interaction Functions ---
+        function saveTileName(tileId) { /* ... No changes needed here ... */
+            const inputElement = document.getElementById('tileNameInput_' + tileId);
+            const tileName = inputElement ? inputElement.value.trim() : 'Unnamed';
+            const tileData = selectedTiles[tileId];
+            if (!tileData) { console.error("Could not find tile data for ID:", tileId); if (currentPopup) { currentPopup.remove(); } return; }
+            tileData.name = tileName || 'Unnamed';
+            tileData.selected = true;
+            if (!tileData.hasOwnProperty('uniqueId')) { tileData.uniqueId = nextTileUniqueId++; console.log(`Assigned uniqueId ${tileData.uniqueId} to ${tileId}`); }
+            if (!selectedTileOrder.includes(tileId)) { selectedTileOrder.push(tileId); console.log('Added to order:', tileId); }
+            if (currentPopup) { currentPopup.remove(); } // Close popup
+            redrawSelectedHighlights();
+            updateOutputString();
+        }
+
+        function deselectTile(tileId) { /* ... No changes needed here ... */
+             if (selectedTiles[tileId]) {
+                 selectedTiles[tileId].selected = false;
+                 const index = selectedTileOrder.indexOf(tileId);
+                 if (index > -1) { selectedTileOrder.splice(index, 1); console.log('Removed from order:', tileId); }
+                 if (currentPopup) { currentPopup.remove(); } // Close popup
+                 redrawSelectedHighlights();
+                 updateOutputString();
+             }
+         }
+
+        function openNamingPopup(tileId, lngLat, tileBoundsData) { // lngLat is MapLibre LngLat object
+             // Close previous popup if open
+             if (currentPopup) { currentPopup.remove(); }
+
+             const currentData = selectedTiles[tileId];
+             const currentName = currentData?.name || '';
+             const isSelected = currentData?.selected || false;
+
+             // Ensure data exists, using bounds passed from click handler
+             if (!currentData) {
+                  selectedTiles[tileId] = { name: '', sw: tileBoundsData.sw, ne: tileBoundsData.ne, selected: false };
+             } else {
+                  // Update coords just in case, though unlikely to change for a given tile ID
+                   selectedTiles[tileId].sw = tileBoundsData.sw;
+                   selectedTiles[tileId].ne = tileBoundsData.ne;
+             }
+
+             const popupContentDiv = document.createElement('div');
+             popupContentDiv.className = 'naming-popup-content'; // Add class for styling
+
+             let buttonsHTML = `<button onclick="saveTileName('${tileId}')">Save Name</button>`;
+             if (isSelected) {
+                 buttonsHTML += `<button class="deselect-button" onclick="deselectTile('${tileId}')">Deselect</button>`;
+             }
+
+             popupContentDiv.innerHTML = `<b>Name this tile:</b><br>
+                                          <input type="text" id="tileNameInput_${tileId}" placeholder="Enter name..." value="${currentName}">
+                                          <div>${buttonsHTML}</div>`; // Wrap buttons in div if needed
+
+             currentPopup = new maplibregl.Popup({ closeOnClick: true, closeButton: true, maxWidth: '240px' }) // Adjust max width
+                 .setLngLat(lngLat) // Use MapLibre LngLat object or [lon, lat] array
+                 .setDOMContent(popupContentDiv) // Use setDOMContent for interactive elements
+                 .addTo(map);
+
+             // Focus input after popup is potentially opened
+             setTimeout(() => {
+                 const input = document.getElementById('tileNameInput_' + tileId);
+                 if (input) { input.focus(); input.select(); }
+             }, 100); // Timeout might need adjustment
+         }
+
+        // --- Custom Grid Toggle Control (MapLibre) ---
+        class GridToggleControl {
+             onAdd(mapInstance) {
+                 this._map = mapInstance;
+                 this._container = document.createElement('div');
+                 this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group maplibregl-ctrl-grid-toggle'; // Use MapLibre classes + custom one
+
+                 const spanZ14 = document.createElement('span');
+                 const spanZ17 = document.createElement('span');
+                 spanZ14.id = 'toggle-z14'; spanZ14.textContent = 'Tiles/Squadrats';
+                 spanZ17.id = 'toggle-z17'; spanZ17.textContent = 'Squadratinhos';
+
+                 this._container.appendChild(spanZ14);
+                 this._container.appendChild(spanZ17);
+
+                 // Set initial active state
+                 this.updateActiveState(spanZ14, spanZ17);
+
+                 // Add event listeners
+                 spanZ14.addEventListener('click', () => {
+                     if (gridDisplayZoomLevel !== 14) {
+                         gridDisplayZoomLevel = 14;
+                         this.updateActiveState(spanZ14, spanZ17);
+                         drawGrid(); // Redraw grid
+                     }
+                 });
+                 spanZ17.addEventListener('click', () => {
+                     if (gridDisplayZoomLevel !== 17) {
+                         gridDisplayZoomLevel = 17;
+                         this.updateActiveState(spanZ14, spanZ17);
+                         drawGrid(); // Redraw grid
+                     }
+                 });
+
+                 return this._container;
+             }
+
+             updateActiveState(spanZ14, spanZ17) {
+                 if (gridDisplayZoomLevel === 14) {
+                     spanZ14.classList.add('active');
+                     spanZ17.classList.remove('active');
+                 } else {
+                     spanZ17.classList.add('active');
+                     spanZ14.classList.remove('active');
+                 }
+             }
+
+             onRemove() {
+                 this._container.parentNode.removeChild(this._container);
+                 this._map = undefined;
+             }
+         }
+         // Add the custom control
+         map.addControl(new GridToggleControl(), 'bottom-left');
+
+
+        // --- Map Event Listeners ---
+        map.on('load', () => {
+             console.log('Map style loaded.');
+             // It's safer to add sources/layers and redraw highlights/grid here
+             // in case they were called before the style finished loading initially.
+             redrawSelectedHighlights(); // Draw initial highlights if any
+             drawGrid(); // Draw initial grid
+        });
+
+        map.on('moveend', drawGrid); // Update grid on move end
+        map.on('zoomend', drawGrid); // Update grid on zoom end
+
+
+        // Map Click Handler (MapLibre)
+        map.on('click', (e) => {
+            // Don't trigger tile selection if clicking on a control (like geolocate)
+             if (e.originalEvent.target.closest('.maplibregl-ctrl')) {
+                 return;
+             }
+
+             const lon = e.lngLat.lng;
+             const lat = e.lngLat.lat;
+
+             const currentSelectionZoom = gridDisplayZoomLevel;
+             const tileX = lonDegToXTile(lon, currentSelectionZoom);
+             const tileY = latDegToYTile(lat, currentSelectionZoom);
+             const tileId = generateTileId(tileX, tileY, currentSelectionZoom);
+             const tileBoundsData = getTileBounds(tileX, tileY, currentSelectionZoom); // Get {sw, ne}
+
+             openNamingPopup(tileId, e.lngLat, tileBoundsData); // Pass MapLibre LngLat object
+        });
+
+
+        // --- Copy Button Logic ---
+        const copyButton = document.getElementById('copyButton');
+        const outputTextArea = document.getElementById('outputString');
+        if (copyButton && outputTextArea) { /* ... No changes needed here ... */
+            copyButton.addEventListener('click', () => {
+                const textToCopy = outputTextArea.value; if (!textToCopy) { return; }
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(textToCopy).then(() => { const originalText = copyButton.textContent; copyButton.textContent = 'Copied!'; copyButton.classList.add('copied'); setTimeout(() => { copyButton.textContent = originalText; copyButton.classList.remove('copied'); }, 1500);
+                    }).catch(err => { console.error('Failed to copy text: ', err); alert('Failed to copy text.'); });
+                } else { console.warn('Clipboard API not available.'); alert('Copying failed. Please copy manually.'); }
+            });
+        }
+
+        // --- Initial Draw Call (After map setup) ---
+        // Note: Drawing now primarily happens after 'load' event for layers
+        updateOutputString(); // Update output display initially
+
+    </script>
+
+</body>
+</html>
