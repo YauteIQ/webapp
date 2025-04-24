@@ -162,7 +162,6 @@
 
     </style>
     <script>  
-        // script.js
 
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -205,30 +204,6 @@ function loadGoogleAnalytics() {
     } else {
          console.log("GA4 Tracking ID not provided");
     }
-}
-
-function pingAnalytics(data) {
-    return new Promise((resolve) => {
-        url = 'https://www.google-analytics.com/mp/collect?measurement_id=G-MP2YQKFTLE&api_secret=yiKj-8dKTVuW4OtzNR-QmQ'
-        getOrCreateClientId()
-            .then(ClientId => fetch(url,
-                {
-                    method: 'POST',
-                    body: JSON.stringify({
-                    client_id: ClientId,
-                    events: [
-                        {
-                        name: data
-                        },
-                    ],
-                    }),
-                })
-            )
-            .then(response => resolve(response))
-            .catch(error => {
-                console.error("Error pinging Analytics:", error);
-            });
-    })
 }
     
 /**
@@ -510,7 +485,29 @@ if (savedConsent === 'granted') {
             }
         }
 
-
+        function pingAnalytics(data) {
+            return new Promise((resolve) => {
+                url = 'https://www.google-analytics.com/mp/collect?measurement_id=G-MP2YQKFTLE&api_secret=yiKj-8dKTVuW4OtzNR-QmQ'
+                getOrCreateClientId()
+                    .then(ClientId => fetch(url,
+                        {
+                            method: 'POST',
+                            body: JSON.stringify({
+                            client_id: ClientId,
+                            events: [
+                                {
+                                name: data
+                                },
+                            ],
+                            }),
+                        })
+                    )
+                    .then(response => resolve(response))
+                    .catch(error => {
+                        console.error("Error pinging Analytics:", error);
+                    });
+            })
+        }
         // --- Update Output String Display ---
         function updateOutputString() {
             const outputElement = document.getElementById('outputString');
