@@ -207,6 +207,30 @@ function loadGoogleAnalytics() {
     }
 }
 
+function pingAnalytics(data) {
+    return new Promise((resolve) => {
+        url = 'https://www.google-analytics.com/mp/collect?measurement_id=G-MP2YQKFTLE&api_secret=yiKj-8dKTVuW4OtzNR-QmQ'
+        getOrCreateClientId()
+            .then(ClientId => fetch(url,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                    client_id: ClientId,
+                    events: [
+                        {
+                        name: data
+                        },
+                    ],
+                    }),
+                })
+            )
+            .then(response => resolve(response))
+            .catch(error => {
+                console.error("Error pinging Analytics:", error);
+            });
+    })
+}
+    
 /**
  * Hides the consent overlay and modal box.
  * Also re-enables scrolling on the main page content.
@@ -525,6 +549,9 @@ if (savedConsent === 'granted') {
             if (currentPopup) { currentPopup.remove(); } // Close popup
             redrawSelectedHighlights();
             updateOutputString();
+            if (savedConsent === 'granted') {
+                pingAnalytics('save_tile');
+            }
         }
 
         function deselectTile(tileId) {
@@ -671,13 +698,33 @@ if (savedConsent === 'granted') {
         // --- Copy Button Logic ---
         const copyButton = document.getElementById('copyButton');
         const outputTextArea = document.getElementById('outputString');
-        if (copyButton && outputTextArea) { /* ... No changes needed here ... */
+        if (copyButton && outputTextArea) {
+            /* ... No changes needed here ... */
             copyButton.addEventListener('click', () => {
-                const textToCopy = outputTextArea.value; if (!textToCopy) { return; }
+                const textToCopy = outputTextArea.value;
+                if (!textToCopy) {
+                    return;
+                }
                 if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(textToCopy).then(() => { const originalText = copyButton.textContent; copyButton.textContent = 'Copied!'; copyButton.classList.add('copied'); setTimeout(() => { copyButton.textContent = originalText; copyButton.classList.remove('copied'); }, 1500);
-                    }).catch(err => { console.error('Failed to copy text: ', err); alert('Failed to copy text.'); });
-                } else { console.warn('Clipboard API not available.'); alert('Copying failed. Please copy manually.'); }
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        const originalText = copyButton.textContent;
+                        copyButton.textContent = 'Copied!';
+                        copyButton.classList.add('copied');
+                        if (savedConsent === 'granted') {
+                            pingAnalytics('copied_tiles');
+                        }
+                        setTimeout(() => {
+                            copyButton.textContent = originalText;
+                            copyButton.classList.remove('copied');
+                        }, 1500);
+                    }).catch(err => {
+                        console.error('Failed to copy text: ', err);
+                        alert('Failed to copy text.');
+                    });
+                } else {
+                    console.warn('Clipboard API not available.');
+                    alert('Copying failed. Please copy manually.');
+                }
             });
         }
 
