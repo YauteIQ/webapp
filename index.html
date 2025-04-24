@@ -549,6 +549,7 @@ if (savedConsent === 'granted') {
             if (currentPopup) { currentPopup.remove(); } // Close popup
             redrawSelectedHighlights();
             updateOutputString();
+            const savedConsent = localStorage.getItem(CONSENT_KEY);
             if (savedConsent === 'granted') {
                 pingAnalytics('save_tile');
             }
@@ -710,6 +711,7 @@ if (savedConsent === 'granted') {
                         const originalText = copyButton.textContent;
                         copyButton.textContent = 'Copied!';
                         copyButton.classList.add('copied');
+                        const savedConsent = localStorage.getItem(CONSENT_KEY);
                         if (savedConsent === 'granted') {
                             pingAnalytics('copied_tiles');
                         }
