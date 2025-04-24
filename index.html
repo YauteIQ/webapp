@@ -167,8 +167,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // --- Configuration ---
 const GA4_TRACKING_ID = 'G-MP2YQKFTLE';
-// Key for storing the user's choice in the browser's local storage
-const CONSENT_KEY = 'user_consent_analytics_v1';
 
 // --- DOM Element References ---
 // Get references to the necessary HTML elements
@@ -237,7 +235,7 @@ function showConsentUI() {
  */
 function grantConsent() {
     // Store the choice in local storage
-    localStorage.setItem(CONSENT_KEY, 'granted');
+    localStorage.setItem('user_consent_analytics_v1', 'granted');
     // Hide the modal and overlay
     hideConsentUI();
     // Load Google Analytics scripts
@@ -250,7 +248,7 @@ function grantConsent() {
  */
 function denyConsent() {
     // Store the choice in local storage
-    localStorage.setItem(CONSENT_KEY, 'denied');
+    localStorage.setItem('user_consent_analytics_v1', 'denied');
     // Hide the modal and overlay
     hideConsentUI();
     // Analytics scripts are NOT loaded
@@ -266,7 +264,7 @@ if (!consentOverlay || !consentBanner || !acceptButton || !denyButton) {
 }
 
 // Check if a consent decision has already been stored from a previous visit
-const savedConsent = localStorage.getItem(CONSENT_KEY);
+const savedConsent = localStorage.getItem('user_consent_analytics_v1');
 
 // --- Decision Logic ---
 if (savedConsent === 'granted') {
@@ -546,7 +544,7 @@ if (savedConsent === 'granted') {
             if (currentPopup) { currentPopup.remove(); } // Close popup
             redrawSelectedHighlights();
             updateOutputString();
-            const savedConsent = localStorage.getItem(CONSENT_KEY);
+            const savedConsent = localStorage.getItem('user_consent_analytics_v1');
             if (savedConsent === 'granted') {
                 pingAnalytics('save_tile');
             }
@@ -708,7 +706,7 @@ if (savedConsent === 'granted') {
                         const originalText = copyButton.textContent;
                         copyButton.textContent = 'Copied!';
                         copyButton.classList.add('copied');
-                        const savedConsent = localStorage.getItem(CONSENT_KEY);
+                        const savedConsent = localStorage.getItem('user_consent_analytics_v1');
                         if (savedConsent === 'granted') {
                             pingAnalytics('copied_tiles');
                         }
