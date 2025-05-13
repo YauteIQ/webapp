@@ -503,6 +503,55 @@ if (savedConsent === 'granted') {
                 });
             })
         }
+        // --- Analytics Ping ---
+        function pingAnalytics(eventName) { // Changed parameter name for clarity
+            const savedConsent = localStorage.getItem('user_consent_analytics_v1');
+            if (savedConsent !== 'granted') {
+                console.log("Analytics consent not granted, skipping MP ping.");
+                return Promise.resolve(); // Don't ping if no consent
+            }
+
+            // --- Add client_id ---
+            let clientId = localStorage.getItem('tileiq_mp_client_id');
+            if (!clientId) {
+                // Generate a simple pseudo-unique ID if one doesn't exist
+                clientId = Date.now() + '.' + Math.random().toString(36).substring(2);
+                localStorage.setItem('tileiq_mp_client_id', clientId);
+                console.log("Generated new MP client_id:", clientId);
+            }
+            // --- End: Add client_id ---
+
+
+            return new Promise((resolve) => {
+                const url = 'https://www.google-analytics.com/mp/collect?measurement_id=G-MP2YQKFTLE&api_secret=yiKj-8dKTVuW4OtzNR-QmQ';
+                const payload = {
+                    client_id: clientId, // Include the client_id here
+                    events: [{
+                        name: eventName, // Use the event name passed to the function
+                        params: {} // Add any relevant parameters if needed later
+                    }],
+                };
+
+                console.log("Pinging Analytics with payload:", JSON.stringify(payload)); // Log the payload
+
+                fetch(url, {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                })
+                .then(response => {
+                    // Log the response status for debugging
+                    if (!response.ok && response.status !== 204) { // 204 is ok
+                       console.error(`Analytics ping failed with status: ${response.status}`);
+                    }
+                     resolve(response);
+                })
+                .catch(error => {
+                    console.error(`Error pinging Analytics for '${eventName}':`, error);
+                    resolve(); // Resolve even on fetch error to not block other code
+                });
+            });
+        }
+      
         // --- Update Output String Display ---
         function updateOutputString() {
             const outputElement = document.getElementById('outputString');
@@ -531,20 +580,18 @@ if (savedConsent === 'granted') {
         // --- Interaction Functions ---
         function saveTileName(tileId) {
             const inputElement = document.getElementById('tileNameInput_' + tileId);
-            const tileName = inputElement ? inputElement.value.trim() : 'Unnamed';
+            const tileName = inputElement ? inputElement.value.trim() : '';
+            tilename = tileName.replaceAll(/[\|\^]/g, ''); 
             const tileData = selectedTiles[tileId];
-            if (!tileData) { console.error("Could not find tile data for ID:", tileId); if (currentPopup) { currentPopup.remove(); } return; }
-            tileData.name = tileName || 'Unnamed';
-            tileData.selected = true;
             if (!tileData.hasOwnProperty('uniqueId')) { tileData.uniqueId = nextTileUniqueId++; console.log(`Assigned uniqueId ${tileData.uniqueId} to ${tileId}`); }
             if (!selectedTileOrder.includes(tileId)) { selectedTileOrder.push(tileId); console.log('Added to order:', tileId); }
+            if (!tileData) { console.error("Could not find tile data for ID:", tileId); if (currentPopup) { currentPopup.remove(); } return; }
+            tileData.name = tileName.replaceAll(/[\|\^]/g, '') || "Tile_" + tileData.uniqueId;
+            tileData.selected = true;
             if (currentPopup) { currentPopup.remove(); } // Close popup
             redrawSelectedHighlights();
             updateOutputString();
-            const savedConsent = localStorage.getItem('user_consent_analytics_v1');
-            if (savedConsent === 'granted') {
-                pingAnalytics('save_tile');
-            }
+            pingAnalytics('save_tile');
         }
 
         function deselectTile(tileId) {
@@ -703,10 +750,7 @@ if (savedConsent === 'granted') {
                         const originalText = copyButton.textContent;
                         copyButton.textContent = 'Copied!';
                         copyButton.classList.add('copied');
-                        const savedConsent = localStorage.getItem('user_consent_analytics_v1');
-                        if (savedConsent === 'granted') {
-                            pingAnalytics('copied_tiles');
-                        }
+                        pingAnalytics('copied_tiles');
                         setTimeout(() => {
                             copyButton.textContent = originalText;
                             copyButton.classList.remove('copied');
