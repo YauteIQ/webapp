@@ -48,9 +48,17 @@
         .naming-popup-content button.deselect-button:hover { background-color: #c82333; }
 
         /* Grid Toggle Control Styling (using MapLibre conventions where possible) */
-         .maplibregl-ctrl-bottom-left .maplibregl-ctrl { /* Target controls in bottom-left */
-             margin-bottom: 50px; /* Add some margin */
-             clear: none; /* Override default clear */
+        .maplibregl-ctrl-bottom-left {
+             /* Use flex to align controls in the bottom-left corner horizontally */
+             display: flex;
+             flex-direction: row; /* Align children horizontally */
+             align-items: flex-end; /* Align items to the bottom */
+         }
+         .maplibregl-ctrl-bottom-left .maplibregl-ctrl { 
+             /* Remove custom margin and clear property from the previous block */
+             margin-bottom: 10px; /* Use smaller margin-bottom */
+             margin-right: 10px; /* Add margin between controls */
+             clear: none; /* Ensure controls don't stack vertically by default */
          }
         .maplibregl-ctrl-grid-toggle { /* Custom class for the control container */
             background-color: rgba(255, 255, 255, 0.8);
@@ -97,20 +105,17 @@
             margin-top: 10px;
         }
         .maplibregl-ctrl-kml-upload {
-            /* Standard MapLibre control button styling */
-            background-color: #fff;
+            background-color: rgba(255, 255, 255, 0.8);
             border-radius: 4px;
-            box-shadow: 0 0 0 2px rgba(0,0,0,.1);
-            margin: 10px;
-            padding: 0;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+            padding: 5px 10px;
             cursor: pointer;
-            width: 30px; /* Standard MapLibre button size */
-            height: 30px;
+            position: relative;
             display: flex;
             align-items: center;
-            justify-content: center;
-            overflow: hidden; /* Hide the file input scrollbar */
-            position: relative;
+            border: 1px solid #ccc;
+            user-select: none;
+            line-height: 1;
         }
 
         .maplibregl-ctrl-kml-upload input[type="file"] {
@@ -122,24 +127,32 @@
             left: 0;
             opacity: 0;
             cursor: pointer;
-            z-index: 1; /* Ensure it's above the button text */
+            z-index: 1;
         }
 
-        .maplibregl-ctrl-kml-upload span {
+        .maplibregl-ctrl-kml-upload span.label {
             /* The visible label */
-            font-weight: bold;
-            font-size: 10px;
+            font-size: 12px;
             color: #333;
-            line-height: 30px; /* Center text vertically */
-            text-align: center;
-            width: 100%;
-            height: 100%;
-            background-color: #007bff; /* Primary color for "NEW" */
+            white-space: nowrap;
+            margin-right: 5px; /* Space before the flag */
+            font-weight: 500;
+            z-index: 0;
+        }
+        
+        .maplibregl-ctrl-kml-upload span.flag {
+            /* The "NEW" flag */
+            background-color: #007bff; /* Primary color */
             color: white;
+            padding: 2px 4px;
+            font-size: 8px;
+            font-weight: bold;
+            border-radius: 2px;
+            z-index: 0;
         }
 
-        .maplibregl-ctrl-kml-upload:hover span {
-            background-color: #0056b3; /* Darker hover */
+        .maplibregl-ctrl-kml-upload:hover {
+            background-color: #f4f4f4;
         }
 
         /* Full screen overlay */
@@ -359,13 +372,6 @@ if (savedConsent === 'granted') {
         </div>
     </div>
 
-    <div id="kml-upload-control-container" class="maplibregl-ctrl-top-left maplibregl-ctrl">
-        <div class="maplibregl-ctrl-kml-upload" title="Import KML downloaded from squadrats.com">
-            <input type="file" id="kml-upload-input" accept=".kml">
-            <span>NEW</span>
-        </div>
-    </div>
-
 
     <script>
         // --- Configuration ---
@@ -415,6 +421,32 @@ if (savedConsent === 'granted') {
             return { sw: [lat_sw, lon_sw], ne: [lat_ne, lon_ne] };
         }
         function generateTileId(x, y, z) { return `z${z}-${x}-${y}`; }
+
+        // --- Geometry Helper: Point-in-Polygon (PIP) Test ---
+        /**
+         * Determines if a point is inside a polygon using the Ray Casting algorithm.
+         * The polygon boundary must be an array of [lon, lat] pairs.
+         * @param {number[]} point [lon, lat]
+         * @param {number[][]} polygon An array of [lon, lat] coordinates forming the polygon ring.
+         * @returns {boolean} True if the point is inside the polygon.
+         */
+         function isPointInPolygon(point, polygon) {
+            const x = point[0], y = point[1];
+            let inside = false;
+            
+            // Loop through each edge of the polygon
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i][0], yi = polygon[i][1];
+                const xj = polygon[j][0], yj = polygon[j][1];
+
+                // Check for intersections with a ray extending right from the point
+                const intersect = ((yi > y) !== (yj > y)) && 
+                                  (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
 
         // --- GeoJSON Generation ---
         // Function to generate GeoJSON for grid lines
@@ -616,93 +648,72 @@ if (savedConsent === 'granted') {
             // Clear previous visited tiles
             Object.keys(visitedTiles).forEach(key => delete visitedTiles[key]); 
 
-            for (let i = 0; i < coordinatesElements.length; i++) {
-                const coordsText = coordinatesElements[i].textContent.trim();
-                if (!coordsText) continue;
-
-                // The KML has coordinates in Lon,Lat,Alt format. We only need Lon,Lat.
-                // We're expecting a huge polygon boundary which is the union of all tiles.
-                // It's much faster to iterate over the bounding box of the whole polygon 
-                // and check every tile inside it, than to use complex geometry libraries.
-                
-                const points = coordsText.split(/\s+/).map(p => {
-                    const parts = p.split(',');
-                    return [parseFloat(parts[0]), parseFloat(parts[1])]; // [Lon, Lat]
-                });
-                
-                if (points.length < 3) continue; // Not a valid polygon
-
-                // Calculate bounding box for the entire polygon
-                let minLon = points[0][0], maxLon = points[0][0];
-                let minLat = points[0][1], maxLat = points[0][1];
-                points.forEach(p => {
-                    minLon = Math.min(minLon, p[0]);
-                    maxLon = Math.max(maxLon, p[0]);
-                    minLat = Math.min(minLat, p[1]);
-                    maxLat = Math.max(maxLat, p[1]);
-                });
-                
-                // Get tiles for Z14
-                const z14MinX = lonDegToXTile(minLon, 14);
-                const z14MaxX = lonDegToXTile(maxLon, 14);
-                const z14MinY = latDegToYTile(maxLat, 14); // Note: Y tile index decreases with increasing latitude
-                const z14MaxY = latDegToYTile(minLat, 14);
-
-                // Iterate over the bounding box of Z14 tiles
-                for (let x = z14MinX; x <= z14MaxX; x++) {
-                    for (let y = z14MinY; y <= z14MaxY; y++) {
-                        const tileId = generateTileId(x, y, 14);
-                        // We assume all tiles inside the KML boundary are "visited"
-                        // This is a common and efficient simplification for this use case.
-                        visitedTiles[tileId] = true;
-                    }
-                }
-                
-                // Get tiles for Z17
-                const z17MinX = lonDegToXTile(minLon, 17);
-                const z17MaxX = lonDegToXTile(maxLon, 17);
-                const z17MinY = latDegToYTile(maxLat, 17);
-                const z17MaxY = latDegToYTile(minLat, 17);
-
-                // Iterate over the bounding box of Z17 tiles
-                for (let x = z17MinX; x <= z17MaxX; x++) {
-                    for (let y = z17MinY; y <= z17MaxY; y++) {
-                        const tileId = generateTileId(x, y, 17);
-                        visitedTiles[tileId] = true;
-                    }
-                }
+            // Process the first polygon found (assuming it contains all visited area)
+            // The polygon ring should be Lon,Lat pairs.
+            const coordsText = coordinatesElements[0].textContent.trim();
+            if (!coordsText) { 
+                alert("The first coordinate block is empty.");
+                return;
             }
 
-            console.log(`Successfully parsed KML. Found ${Object.keys(visitedTiles).length} unique tiles.`);
+            // Format polygon for PIP test: array of [lon, lat] points
+            const polygon = coordsText.split(/\s+/).map(p => {
+                const parts = p.split(',');
+                // KML coordinates are Lon, Lat, (Altitude)
+                return [parseFloat(parts[0]), parseFloat(parts[1])]; 
+            });
+            
+            if (polygon.length < 4) { // Need at least 4 points to form a closed polygon
+                 alert("The KML polygon is too small or improperly formed.");
+                 return;
+            }
+
+            // Calculate **TRUE** bounding box for iteration efficiency
+            let minLon = polygon[0][0], maxLon = polygon[0][0];
+            let minLat = polygon[0][1], maxLat = polygon[0][1];
+            polygon.forEach(p => {
+                minLon = Math.min(minLon, p[0]);
+                maxLon = Math.max(maxLon, p[0]);
+                minLat = Math.min(minLat, p[1]);
+                maxLat = Math.max(maxLat, p[1]);
+            });
+
+            // --- Iteration Logic ---
+            // Process both Z14 and Z17 levels
+
+            [14, 17].forEach(z => {
+                const minX = lonDegToXTile(minLon, z);
+                const maxX = lonDegToXTile(maxLon, z);
+                const minY = latDegToYTile(maxLat, z);
+                const maxY = latDegToYTile(minLat, z);
+
+                // Iterate only over tiles within the bounding box
+                for (let x = minX; x <= maxX; x++) {
+                    for (let y = minY; y <= maxY; y++) {
+                        const tileId = generateTileId(x, y, z);
+                        const bounds = getTileBounds(x, y, z);
+                        
+                        // Calculate tile center (midpoint of NE and SW corners)
+                        const centerLon = (bounds.sw[1] + bounds.ne[1]) / 2;
+                        const centerLat = (bounds.sw[0] + bounds.ne[0]) / 2;
+                        const tileCenter = [centerLon, centerLat];
+                        
+                        // **CRITICAL FIX: Check if the tile center is inside the KML polygon**
+                        if (isPointInPolygon(tileCenter, polygon)) {
+                            visitedTiles[tileId] = true;
+                        }
+                    }
+                }
+            });
+
+
+            const tileCount = Object.keys(visitedTiles).length;
+            console.log(`Successfully parsed KML. Found ${tileCount} unique tiles.`);
             drawVisitedHighlights();
             pingAnalytics('kml_imported');
-            alert(`KML imported! ${Object.keys(visitedTiles).length} unique tiles loaded.`);
-        }
+            alert(`KML imported! ${tileCount} unique tiles loaded.`);
+        }        
         
-        // --- Add File Upload Event Listener ---
-        document.addEventListener('DOMContentLoaded', function() {
-            const kmlInput = document.getElementById('kml-upload-input');
-            if (kmlInput) {
-                kmlInput.addEventListener('change', (event) => {
-                    const file = event.target.files[0];
-                    if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            parseKML(e.target.result);
-                        };
-                        reader.onerror = (e) => {
-                            console.error("Error reading file:", e);
-                            alert("Error reading file. Please try again.");
-                        };
-                        reader.readAsText(file);
-                    }
-                    // Reset the file input so the same file can be uploaded again
-                    event.target.value = '';
-                });
-            }
-        });
-        
-
         function pingAnalytics(data) {
             return new Promise((resolve) => {
                 url = 'https://www.google-analytics.com/mp/collect?measurement_id=G-MP2YQKFTLE&api_secret=yiKj-8dKTVuW4OtzNR-QmQ'
@@ -866,6 +877,53 @@ if (savedConsent === 'granted') {
              }, 100); // Timeout might need adjustment
          }
 
+
+        // --- Custom KML Upload Control (MapLibre) ---
+        class KmlUploadControl {
+            onAdd(mapInstance) {
+                this._map = mapInstance;
+                this._container = document.createElement('div');
+                this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group maplibregl-ctrl-kml-upload';
+                this._container.title = 'Upload KML from squadrats.com';
+                
+                // HTML structure
+                this._container.innerHTML = `
+                    <input type="file" id="kml-upload-input" accept=".kml">
+                    <span class="label">Upload KML from squadrats.com</span>
+                    <span class="flag">NEW</span>
+                `;
+
+                // Add event listener (using logic defined below)
+                this._input = this._container.querySelector('#kml-upload-input');
+                this._input.addEventListener('change', this.handleFileChange.bind(this));
+                
+                return this._container;
+            }
+
+            onRemove() {
+                this._input.removeEventListener('change', this.handleFileChange);
+                this._container.parentNode.removeChild(this._container);
+                this._map = undefined;
+            }
+
+            handleFileChange(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        parseKML(e.target.result); // Use existing global parseKML function
+                    };
+                    reader.onerror = (e) => {
+                        console.error("Error reading file:", e);
+                        alert("Error reading file. Please try again.");
+                    };
+                    reader.readAsText(file);
+                }
+                // Reset the file input so the same file can be uploaded again
+                event.target.value = '';
+            }
+        }
+
         // --- Custom Grid Toggle Control (MapLibre) ---
         class GridToggleControl {
              onAdd(mapInstance) {
@@ -919,8 +977,8 @@ if (savedConsent === 'granted') {
              }
          }
          // Add the custom control
-         map.addControl(new GridToggleControl(), 'bottom-left');
-
+        map.addControl(new KmlUploadControl(), 'bottom-left');
+        map.addControl(new GridToggleControl(), 'bottom-left');
 
         // --- Map Event Listeners ---
         map.on('load', () => {
