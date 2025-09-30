@@ -191,7 +191,6 @@
         }
 
         if (features.length > 0) {
-            alert(`KML processed! Found ${features.length} polygons. Drawing on map.`);
             drawKmlOverlay({ type: 'FeatureCollection', features: features });
             map.fitBounds(globalBounds, { padding: 50, maxZoom: 15 });
         } else {
