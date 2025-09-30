@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TileIQ Data Field Help</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+        h1 {
+            color: #0078d4;
+            text-align: center;
+            margin-bottom: 5px;
+            border-bottom: 2px solid #0078d4;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+            margin-top: 30px;
+        }
+        p, ul {
+            line-height: 1.6;
+        }
+        a {
+            color: #0078d4;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .logo-placeholder {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo-placeholder img {
+            max-width: 150px;
+            height: auto;
+            border: 1px dashed #ccc;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .step-list li {
+            margin-bottom: 15px;
+            padding-left: 0;
+        }
+        .note {
+            background-color: #e6f7ff;
+            border-left: 5px solid #0078d4;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="logo-placeholder">
+        <p>
+            <img src="https://yauteiq.github.io/webapp/logo.png" alt="TileIQ Logo" style="display:block; margin: 0 auto;">
+        </p>
+    </div>
+
+    <h1>TileIQ Help</h1>
+
+    <p>
+        TileIQ has been designed to make tile or squadrats hunting easier.
+    </p>
+
+    <p>
+        You can find the data field on the Garmin Connect IQ store here:
+        <br>
+        <a href="https://apps.garmin.com/apps/e8c88d36-2dc2-45d1-be53-f325a963459f" target="_blank">TileIQ on Garmin Connect IQ Store</a>
+    </p>
+
+    <p>
+        A demo video showing the data field in action is available on YouTube:
+        <br>
+        <a href="https://www.youtube.com/watch?v=HFRxYIWGAwo" target="_blank">TileIQ Demo Video</a>
+    </p>
+
+    <hr>
+
+    <h2>How To Sync Your Tiles with TileIQ</h2>
+
+    <p>
+        For TileIQ to help you get those tiles, you must first generate a list of tiles, and sync it to your Garmin device.
+    </p>
+
+    <ol class="step-list">
+        <li>
+            <h3>Generate Your Tile List</h3>
+            <p>
+                The list of tiles you want to "hunt" must be generated and copied from the TileIQ WebApp:
+                <br>
+                <a href="https://yauteiq.github.io/webapp/">https://yauteiq.github.io/webapp/</a>
+            </p>
+            <p>
+                There are two ways you can generate your list:
+            </p>
+            <ul>
+                <li>
+                    <h4>Method 1: Hand Pick on the Map</h4>
+                    Simply use the map on the YauteIQ WebApp to select and manually add each tile you are interested in.
+                    <br>You can make this easier by downloading your KML file from squadrats.com (on the right of the map screen) and uploading it on <a href="https://yauteiq.github.io/webapp/">https://yauteiq.github.io/webapp/</a>.
+                    <br>This will overlay your visited tiles and squadratinhos on the map.
+                </li>
+                <li>
+                    <h4>Method 2: Generate from a GPX route</h4>
+                    If your tile or squadrat hunting starts by planning a route in Strava, Garmin or RideWithGPS, this should be the best option for you.<br>
+                    <div class="note">
+                        This option enables you to leverage the Squadrats Chrome extension to easily plan and mark tiles directly within your favourite route builder!
+                        <br>
+                        <a href="https://chromewebstore.google.com/detail/squadrats-route-planning/mkcobabnclhdodfhajlagglahfhkeeon?hl=en" target="_blank">Squadrats Route Planning Chrome Extension</a>
+                    </div>
+                    <br>When planning your route, you can mark points of interest, which are then converted into your desired tile list.
+                    <ol>
+                        <li>
+                            While planning your route, add a point in each of the tile/squadrat/squadratinho you wish to capture.
+                            <ul>
+                                <li>On Garmin Connect, they call it a "Course point"</li>
+                                <li>On RideWithGPS, they call it a "Cue point"</li>
+                                <li>On Strava, they call it a "Waypoint"</li>
+                            </ul>
+                        </li>
+                        <div class="note">
+                            Unfortunately, Komoot doesn't offer a way to customise waypoints, so this method is not available for Komoot routes.
+                        </div>
+                        <li>
+                            Name each point with a name starting with one or two underscores (`_` or `__`) to signal your intent:
+                            <ul>
+                                <li>
+                                    <span class="highlight">One underscore (e.g., `_mytile`):</span> Signals interest in the tile/squadrats the point belongs to.
+                                </li>
+                                <li>
+                                    <span class="highlight">Two underscores (e.g., `__mysquadratinho`):</span> Signals interest in the squadratinhos the point belongs to.
+                                </li>
+                            </ul>
+                        </li>
+                        <li>
+                            Export the route as a GPX file.
+                        </li>
+                        <li>
+                            Upload the GPX file to the <a href="https://yauteiq.github.io/webapp/" target="_blank">YauteIQ WebApp</a>. A list will be generated containing all the tiles corresponding to your custom points.
+                        </li>
+                    </ol>
+                </li>
+            </ul>
+        </li>
+        <li>
+            <h3>Copy and Sync the List</h3>
+            <p>
+                Once the TileIQ WebApp displays the list of tile IDs you want to hunt, click the button to copy it.
+            </p>
+            <p>
+                The rest happens in Garmin Connect:
+                <ol>
+                    <li>In the Garmin Connect App, find and open your Garmin device.</li>
+                    <li>Navigate to Activities, Apps & More > Data fields.</li>
+                    <li>Select and open the settings for the TileIQ data field.</li>
+                    <li>Paste the text list you copied into the settings field.</li>
+                    <li>Sync your device</li>
+                    <li>Go get those tiles!</li>
+                </ol>
+            </p>
+        </li>
+    </ol>
+    <hr>
+    <p style="text-align: center; font-size: 0.9em; color: #777;">
+        Happy Tile Hunting! 🗺️
+    </p>
+</div>
+
+</body>
+</html>
