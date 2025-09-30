@@ -53,13 +53,13 @@
              display: flex;
              flex-direction: row; /* Align children horizontally */
              align-items: flex-end; /* Align items to the bottom */
-         }
-         .maplibregl-ctrl-bottom-left .maplibregl-ctrl { 
+       }
+       .maplibregl-ctrl-bottom-left .maplibregl-ctrl { 
              /* Remove custom margin and clear property from the previous block */
              margin-bottom: 10px; /* Use smaller margin-bottom */
              margin-right: 10px; /* Add margin between controls */
              clear: none; /* Ensure controls don't stack vertically by default */
-         }
+       }
         .maplibregl-ctrl-grid-toggle { /* Custom class for the control container */
             background-color: rgba(255, 255, 255, 0.8);
             border-radius: 15px; /* User's radius */
@@ -82,18 +82,18 @@
              border-bottom-left-radius: 14px;
              border-right: 1px solid #ccc; /* Separator */
         }
-         .maplibregl-ctrl-grid-toggle span:last-child {
+       .maplibregl-ctrl-grid-toggle span:last-child {
              border-top-right-radius: 14px;
              border-bottom-right-radius: 14px;
-         }
+       }
         .maplibregl-ctrl-grid-toggle span.active {
             background-color: #007bff;
             color: white;
             font-weight: bold;
         }
-         .maplibregl-ctrl-grid-toggle span:not(.active):hover {
+       .maplibregl-ctrl-grid-toggle span:not(.active):hover {
              background-color: #f4f4f4;
-         }
+       }
         /* Style for the page body to prevent scrolling when modal is open (optional) */
         body.modal-open {
             overflow: hidden;
@@ -139,7 +139,7 @@
             font-weight: 500;
             z-index: 0;
         }
-        
+       
         .maplibregl-ctrl-kml-upload span.flag {
             /* The "NEW" flag */
             background-color: #007bff; /* Primary color */
@@ -182,7 +182,7 @@
             z-index: 1000; /* Ensure modal is above the overlay */
             text-align: center;
             max-width: 500px; /* Max width of the modal */
-            width: 100%;     /* Take available width up to max-width */
+            width: 100%;      /* Take available width up to max-width */
             box-sizing: border-box;
             /* display: block; // Not needed, flex item default */
             position: relative; /* Needed if you want to position elements inside absolutely */
@@ -264,10 +264,10 @@ function loadGoogleAnalytics() {
         gtag('config', GA4_TRACKING_ID);
         console.log(`GA4 configured with ID: ${GA4_TRACKING_ID}`);
     } else {
-         console.log("GA4 Tracking ID not provided");
+       console.log("GA4 Tracking ID not provided");
     }
 }
-    
+   
 /**
  * Hides the consent overlay and modal box.
  * Also re-enables scrolling on the main page content.
@@ -285,7 +285,7 @@ function hideConsentUI() {
   * Also prevents scrolling on the main page content.
   */
 function showConsentUI() {
-     if (consentOverlay) {
+    if (consentOverlay) {
         // Show the overlay using flex display for centering
         consentOverlay.style.display = 'flex';
         // Prevent the body from scrolling while the modal is open
@@ -431,22 +431,22 @@ if (savedConsent === 'granted') {
          * @returns {boolean} True if the point is inside the polygon.
          */
          function isPointInPolygon(point, polygon) {
-            const x = point[0], y = point[1];
-            let inside = false;
+             const x = point[0], y = point[1];
+             let inside = false;
             
-            // Loop through each edge of the polygon
-            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-                const xi = polygon[i][0], yi = polygon[i][1];
-                const xj = polygon[j][0], yj = polygon[j][1];
+             // Loop through each edge of the polygon
+             for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                 const xi = polygon[i][0], yi = polygon[i][1];
+                 const xj = polygon[j][0], yj = polygon[j][1];
 
-                // Check for intersections with a ray extending right from the point
-                const intersect = ((yi > y) !== (yj > y)) && 
-                                  (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                 // Check for intersections with a ray extending right from the point
+                 const intersect = ((yi > y) !== (yj > y)) && 
+                                   (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
                 
-                if (intersect) inside = !inside;
-            }
-            return inside;
-        }
+                 if (intersect) inside = !inside;
+             }
+             return inside;
+         }
 
         // --- GeoJSON Generation ---
         // Function to generate GeoJSON for grid lines
@@ -515,8 +515,8 @@ if (savedConsent === 'granted') {
 
             if (currentZoom >= MIN_GRID_ZOOM - 0.5) { // Use threshold slightly below integer zoom
                 // Use MapLibre's getBounds()
-              const bounds = map.getBounds();
-              const geojsonData = generateGridGeoJson(bounds, gridDisplayZoomLevel);
+                const bounds = map.getBounds();
+                const geojsonData = generateGridGeoJson(bounds, gridDisplayZoomLevel);
 
                 if (source) {
                     source.setData(geojsonData); // Update existing source
@@ -576,7 +576,7 @@ if (savedConsent === 'granted') {
 
         // --- KML Parsing and Drawing ---
         const visitedTiles = {}; // Stores all unique tile IDs from the KML
-        
+       
         function drawVisitedHighlights() {
             const features = [];
             // Convert each stored tile ID back into a GeoJSON Polygon feature
@@ -585,34 +585,45 @@ if (savedConsent === 'granted') {
                 const z = parseInt(parts[0].substring(1));
                 const x = parseInt(parts[1]);
                 const y = parseInt(parts[2]);
-                
+               
                 const tileBounds = getTileBounds(x, y, z);
-                
+               
                 const minLat = tileBounds.sw[0]; const minLon = tileBounds.sw[1];
                 const maxLat = tileBounds.ne[0]; const maxLon = tileBounds.ne[1];
-                
+               
                 const coordinates = [
                     [ [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat] ]
                 ];
-                
+               
                 features.push({
                     type: 'Feature',
                     geometry: { type: 'Polygon', coordinates: coordinates },
                     properties: { tileId: tileId }
                 });
             });
-            
+           
             const geojsonData = { type: 'FeatureCollection', features: features };
 
             const source = map.getSource('visited-source');
 
-            // CRITICAL FIX: The source is guaranteed to exist now, just update data
             if (source) {
                 source.setData(geojsonData);
-                console.log("Updated visited-source data.");
-            } else {
-                // Should not happen, but a fallback log
-                console.error("Visited source not found, Map style not loaded in time.");
+            } else if (map.isStyleLoaded()) {
+                map.addSource('visited-source', { type: 'geojson', data: geojsonData });
+                map.addLayer({
+                    id: 'visited-fill-layer',
+                    type: 'fill',
+                    source: 'visited-source',
+                    paint: {
+                        // Color: Light Gray (e.g., #808080) with 60% opacity
+                        'fill-color': '#808080', 
+                        'fill-opacity': 0.6 
+                    }
+                    // **FIXED**: Removed 'before: 'highlight-fill-layer'' which caused an error
+                    // because 'highlight-fill-layer' doesn't exist on initial load.
+                    // Layers are added in order, so this will now appear correctly
+                    // underneath the highlight layer when it's created later.
+                });
             }
         }
 
@@ -621,7 +632,7 @@ if (savedConsent === 'granted') {
             console.log("Starting KML parsing...");
             const parser = new DOMParser();
             const kmlDoc = parser.parseFromString(kmlText, "text/xml");
-            
+           
             // Check for KML parsing errors
             if (kmlDoc.getElementsByTagName("parsererror").length > 0) {
                 console.error("KML Parse Error:", kmlDoc.getElementsByTagName("parsererror")[0].textContent);
@@ -630,7 +641,7 @@ if (savedConsent === 'granted') {
             }
 
             const coordinatesElements = kmlDoc.getElementsByTagName('coordinates');
-            
+           
             if (coordinatesElements.length === 0) {
                 alert("Could not find any <coordinates> data in the KML file.");
                 return;
@@ -653,7 +664,7 @@ if (savedConsent === 'granted') {
                 // KML coordinates are Lon, Lat, (Altitude)
                 return [parseFloat(parts[0]), parseFloat(parts[1])]; 
             });
-            
+           
             if (polygon.length < 4) { // Need at least 4 points to form a closed polygon
                  alert("The KML polygon is too small or improperly formed.");
                  return;
@@ -683,12 +694,12 @@ if (savedConsent === 'granted') {
                     for (let y = minY; y <= maxY; y++) {
                         const tileId = generateTileId(x, y, z);
                         const bounds = getTileBounds(x, y, z);
-                        
+                       
                         // Calculate tile center (midpoint of NE and SW corners)
                         const centerLon = (bounds.sw[1] + bounds.ne[1]) / 2;
                         const centerLat = (bounds.sw[0] + bounds.ne[0]) / 2;
                         const tileCenter = [centerLon, centerLat];
-                        
+                       
                         // **CRITICAL FIX: Check if the tile center is inside the KML polygon**
                         if (isPointInPolygon(tileCenter, polygon)) {
                             visitedTiles[tileId] = true;
@@ -704,27 +715,7 @@ if (savedConsent === 'granted') {
             pingAnalytics('kml_imported');
             alert(`KML imported! ${tileCount} unique tiles loaded.`);
         }        
-        
-        function pingAnalytics(data) {
-            return new Promise((resolve) => {
-                url = 'https://www.google-analytics.com/mp/collect?measurement_id=G-MP2YQKFTLE&api_secret=yiKj-8dKTVuW4OtzNR-QmQ'
-                fetch(url,
-                    {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            events: [
-                                {
-                                name: data
-                                },
-                            ],
-                        }),
-                    })
-                .then(response => resolve(response))
-                .catch(error => {
-                    console.error("Error pinging Analytics:", error);
-                });
-            })
-        }
+       
         // --- Analytics Ping ---
         function pingAnalytics(eventName) { // Changed parameter name for clarity
             const savedConsent = localStorage.getItem('user_consent_analytics_v1');
@@ -773,7 +764,7 @@ if (savedConsent === 'granted') {
                 });
             });
         }
-      
+       
         // --- Update Output String Display ---
         function updateOutputString() {
             const outputElement = document.getElementById('outputString');
@@ -840,8 +831,8 @@ if (savedConsent === 'granted') {
                   selectedTiles[tileId] = { name: '', sw: tileBoundsData.sw, ne: tileBoundsData.ne, selected: false };
              } else {
                   // Update coords just in case, though unlikely to change for a given tile ID
-                   selectedTiles[tileId].sw = tileBoundsData.sw;
-                   selectedTiles[tileId].ne = tileBoundsData.ne;
+                    selectedTiles[tileId].sw = tileBoundsData.sw;
+                    selectedTiles[tileId].ne = tileBoundsData.ne;
              }
 
              const popupContentDiv = document.createElement('div');
@@ -853,8 +844,8 @@ if (savedConsent === 'granted') {
              }
 
              popupContentDiv.innerHTML = `<b>Name this tile:</b><br>
-                                          <input type="text" id="tileNameInput_${tileId}" placeholder="Enter name..." value="${currentName}">
-                                          <div>${buttonsHTML}</div>`; // Wrap buttons in div if needed
+                                       <input type="text" id="tileNameInput_${tileId}" placeholder="Enter name..." value="${currentName}">
+                                       <div>${buttonsHTML}</div>`; // Wrap buttons in div if needed
 
              currentPopup = new maplibregl.Popup({ closeOnClick: true, closeButton: true, maxWidth: '240px' }) // Adjust max width
                  .setLngLat(lngLat) // Use MapLibre LngLat object or [lon, lat] array
@@ -876,7 +867,7 @@ if (savedConsent === 'granted') {
                 this._container = document.createElement('div');
                 this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group maplibregl-ctrl-kml-upload';
                 this._container.title = 'Upload KML from squadrats.com';
-                
+               
                 // HTML structure
                 this._container.innerHTML = `
                     <input type="file" id="kml-upload-input" accept=".kml">
@@ -887,7 +878,7 @@ if (savedConsent === 'granted') {
                 // Add event listener (using logic defined below)
                 this._input = this._container.querySelector('#kml-upload-input');
                 this._input.addEventListener('change', this.handleFileChange.bind(this));
-                
+               
                 return this._container;
             }
 
@@ -974,30 +965,10 @@ if (savedConsent === 'granted') {
         // --- Map Event Listeners ---
         map.on('load', () => {
              console.log('Map style loaded.');
-             
-             // 1. Initialize Visited Layers (with empty GeoJSON)
-             // This ensures the source and layer are ready for later data injection from KML upload
-             map.addSource('visited-source', { 
-                 type: 'geojson', 
-                 data: { type: 'FeatureCollection', features: [] } 
-             });
-             map.addLayer({
-                 id: 'visited-fill-layer',
-                 type: 'fill',
-                 source: 'visited-source',
-                 paint: {
-                     'fill-color': '#808080', 
-                     'fill-opacity': 0.6 
-                 },
-                 // Place this new layer below the selectable highlights
-                 before: 'highlight-fill-layer' 
-             });
-
-             // 2. Initialize Selection Layers (now simpler, no need for map.isStyleLoaded() check)
-             redrawSelectedHighlights(); 
-             
-             // 3. Draw Grid
-             drawGrid(); 
+             // It's safer to add sources/layers and redraw highlights/grid here
+             // in case they were called before the style finished loading initially.
+             redrawSelectedHighlights(); // Draw initial highlights if any
+             drawGrid(); // Draw initial grid
         });
 
         map.on('moveend', drawGrid); // Update grid on move end
