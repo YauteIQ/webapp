@@ -151,52 +151,90 @@
     }
 
     // --- KML Parsing ---
-    function parseKML(kmlText) {
-        const parser = new DOMParser();
-        const kmlDoc = parser.parseFromString(kmlText, "text/xml");
-        const features = [];
-        const polygons = kmlDoc.getElementsByTagName('Polygon');
-        let globalBounds = new maplibregl.LngLatBounds();
+function parseKML(kmlText) {
+    const parser = new DOMParser();
+    const kmlDoc = parser.parseFromString(kmlText, "text/xml");
+    const polygons = kmlDoc.getElementsByTagName('Polygon');
+    
+    const featuresZ14 = [];
+    const featuresZ17 = [];
+    let globalBounds = new maplibregl.LngLatBounds();
 
-        for (const poly of polygons) {
-            const allRings = [];
+    for (const poly of polygons) {
+        const allRings = [];
+        const outerBoundary = poly.getElementsByTagName('outerBoundaryIs')[0];
+        if (!outerBoundary) continue;
+        const outerCoordsText = outerBoundary.getElementsByTagName('coordinates')[0]?.textContent.trim();
+        if (!outerCoordsText) continue;
 
-            // Get the main outline
-            const outerBoundary = poly.getElementsByTagName('outerBoundaryIs')[0];
-            if (!outerBoundary) continue;
-            const outerCoordsText = outerBoundary.getElementsByTagName('coordinates')[0]?.textContent.trim();
-            if (!outerCoordsText) continue;
-            const outerRing = outerCoordsText.split(/\s+/).map(p => {
-                const parts = p.split(',');
-                const lon = parseFloat(parts[0]);
-                const lat = parseFloat(parts[1]);
-                globalBounds.extend([lon, lat]);
-                return [lon, lat];
-            });
-            allRings.push(outerRing);
+        const outerRing = outerCoordsText.split(/\s+/).map(p => {
+            const parts = p.split(',');
+            const lon = parseFloat(parts[0]);
+            const lat = parseFloat(parts[1]);
+            globalBounds.extend([lon, lat]);
+            return [lon, lat];
+        });
+        allRings.push(outerRing);
 
-            // **FIX**: Get all the "holes" inside the main polygon
-            const innerBoundaries = poly.getElementsByTagName('innerBoundaryIs');
-            for (const inner of innerBoundaries) {
-                const innerCoordsText = inner.getElementsByTagName('coordinates')[0]?.textContent.trim();
-                if (innerCoordsText) {
-                    const innerRing = innerCoordsText.split(/\s+/).map(p => {
-                        const parts = p.split(',');
-                        return [parseFloat(parts[0]), parseFloat(parts[1])];
-                    });
-                    allRings.push(innerRing);
-                }
+        const innerBoundaries = poly.getElementsByTagName('innerBoundaryIs');
+        for (const inner of innerBoundaries) {
+            const innerCoordsText = inner.getElementsByTagName('coordinates')[0]?.textContent.trim();
+            if (innerCoordsText) {
+                const innerRing = innerCoordsText.split(/\s+/).map(p => {
+                    const parts = p.split(',');
+                    return [parseFloat(parts[0]), parseFloat(parts[1])];
+                });
+                allRings.push(innerRing);
             }
-            features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: allRings } });
         }
 
-        if (features.length > 0) {
-            drawKmlOverlay({ type: 'FeatureCollection', features: features });
-            map.fitBounds(globalBounds, { padding: 50, maxZoom: 15 });
+        const feature = { type: 'Feature', geometry: { type: 'Polygon', coordinates: allRings } };
+
+        // Decide which group this polygon belongs to:
+        const parentName = poly.closest("Placemark")?.getElementsByTagName("name")[0]?.textContent || "";
+        if (parentName.includes("17") || parentName.toLowerCase().includes("squadratinho")) {
+            featuresZ17.push(feature);
         } else {
-            alert("No valid polygons found in the KML file.");
+            featuresZ14.push(feature);
         }
     }
+
+    if (featuresZ14.length || featuresZ17.length) {
+        drawKmlOverlay("z14", featuresZ14);
+        drawKmlOverlay("z17", featuresZ17);
+        map.fitBounds(globalBounds, { padding: 50, maxZoom: 15 });
+        updateKmlVisibility(); // ensure correct initial visibility
+    } else {
+        alert("No valid polygons found in the KML file.");
+    }
+}
+
+function drawKmlOverlay(suffix, features) {
+    const sourceId = `kml-${suffix}-source`;
+    const layerId = `kml-${suffix}-layer`;
+
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+
+    map.addSource(sourceId, { type: 'geojson', data: { type: 'FeatureCollection', features } });
+    map.addLayer({
+        id: layerId,
+        type: 'fill',
+        source: sourceId,
+        paint: {
+            'fill-color': suffix === "z14" ? "#28a745" : "#007bff", // green for squadrats, blue for squadratinhos
+            'fill-opacity': 0.15,
+            'fill-outline-color': suffix === "z14" ? "#1a6e2c" : "#004080"
+        }
+    }, 'grid-layer');
+}
+function updateKmlVisibility() {
+    if (map.getLayer('kml-z14-layer'))
+        map.setLayoutProperty('kml-z14-layer', 'visibility', gridDisplayZoomLevel === 14 ? 'visible' : 'none');
+    if (map.getLayer('kml-z17-layer'))
+        map.setLayoutProperty('kml-z17-layer', 'visibility', gridDisplayZoomLevel === 17 ? 'visible' : 'none');
+}
+
 
     // --- Custom Map Controls ---
     class KmlUploadControl {
@@ -228,7 +266,14 @@
             this.updateActiveState();
             return this._container;
         }
-        setGridZoom(z) { if (gridDisplayZoomLevel !== z) { gridDisplayZoomLevel = z; this.updateActiveState(); drawGrid(); } }
+setGridZoom(z) {
+    if (gridDisplayZoomLevel !== z) {
+        gridDisplayZoomLevel = z;
+        this.updateActiveState();
+        drawGrid();
+        updateKmlVisibility(); // 🔑 ensure polygons swap too
+    }
+}
         updateActiveState() { this.spans[0].classList.toggle('active', gridDisplayZoomLevel === 14); this.spans[1].classList.toggle('active', gridDisplayZoomLevel === 17); }
         onRemove() {}
     }
