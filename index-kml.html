@@ -50,13 +50,12 @@
 
         /* Grid Toggle Control Styling (using MapLibre conventions where possible) */
         .maplibregl-ctrl-bottom-left {
-            padding-left: 8px;
+            padding-left: 4px;
             display: flex;
-            flex-direction: row; /* Arrange controls in a horizontal line */
-            align-items: flex-end; /* Align the bottom edges of the controls */
+            flex-direction: column-reverse; /* Arrange controls in a horizontal line */
+            margin-bottom: 30px;
         }
          .maplibregl-ctrl-bottom-left .maplibregl-ctrl { /* Target controls in bottom-left */
-             margin-bottom: 50px; /* Add some margin */
              clear: none; /* Override default clear */
          }
         .maplibregl-ctrl-grid-toggle { /* Custom class for the control container */
@@ -473,62 +472,62 @@ if (savedConsent === 'granted') {
 
         // --- KML Parsing ---
         function parseKML(kmlText) {
-    const parser = new DOMParser();
-    const kmlDoc = parser.parseFromString(kmlText, "text/xml");
-    const polygons = kmlDoc.getElementsByTagName('Polygon');
-    
-    const featuresZ14 = [];
-    const featuresZ17 = [];
-    let globalBounds = new maplibregl.LngLatBounds();
+            const parser = new DOMParser();
+            const kmlDoc = parser.parseFromString(kmlText, "text/xml");
+            const polygons = kmlDoc.getElementsByTagName('Polygon');
+            
+            const featuresZ14 = [];
+            const featuresZ17 = [];
+            let globalBounds = new maplibregl.LngLatBounds();
 
-    for (const poly of polygons) {
-        const allRings = [];
-        const outerBoundary = poly.getElementsByTagName('outerBoundaryIs')[0];
-        if (!outerBoundary) continue;
-        const outerCoordsText = outerBoundary.getElementsByTagName('coordinates')[0]?.textContent.trim();
-        if (!outerCoordsText) continue;
+            for (const poly of polygons) {
+                const allRings = [];
+                const outerBoundary = poly.getElementsByTagName('outerBoundaryIs')[0];
+                if (!outerBoundary) continue;
+                const outerCoordsText = outerBoundary.getElementsByTagName('coordinates')[0]?.textContent.trim();
+                if (!outerCoordsText) continue;
 
-        const outerRing = outerCoordsText.split(/\s+/).map(p => {
-            const parts = p.split(',');
-            const lon = parseFloat(parts[0]);
-            const lat = parseFloat(parts[1]);
-            globalBounds.extend([lon, lat]);
-            return [lon, lat];
-        });
-        allRings.push(outerRing);
-
-        const innerBoundaries = poly.getElementsByTagName('innerBoundaryIs');
-        for (const inner of innerBoundaries) {
-            const innerCoordsText = inner.getElementsByTagName('coordinates')[0]?.textContent.trim();
-            if (innerCoordsText) {
-                const innerRing = innerCoordsText.split(/\s+/).map(p => {
+                const outerRing = outerCoordsText.split(/\s+/).map(p => {
                     const parts = p.split(',');
-                    return [parseFloat(parts[0]), parseFloat(parts[1])];
+                    const lon = parseFloat(parts[0]);
+                    const lat = parseFloat(parts[1]);
+                    globalBounds.extend([lon, lat]);
+                    return [lon, lat];
                 });
-                allRings.push(innerRing);
+                allRings.push(outerRing);
+
+                const innerBoundaries = poly.getElementsByTagName('innerBoundaryIs');
+                for (const inner of innerBoundaries) {
+                    const innerCoordsText = inner.getElementsByTagName('coordinates')[0]?.textContent.trim();
+                    if (innerCoordsText) {
+                        const innerRing = innerCoordsText.split(/\s+/).map(p => {
+                            const parts = p.split(',');
+                            return [parseFloat(parts[0]), parseFloat(parts[1])];
+                        });
+                        allRings.push(innerRing);
+                    }
+                }
+
+                const feature = { type: 'Feature', geometry: { type: 'Polygon', coordinates: allRings } };
+
+                // Decide which group this polygon belongs to:
+                const parentName = poly.closest("Placemark")?.getElementsByTagName("name")[0]?.textContent || "";
+                if (parentName.includes("17") || parentName.toLowerCase().includes("squadratinho")) {
+                    featuresZ17.push(feature);
+                } else {
+                    featuresZ14.push(feature);
+                }
+            }
+
+            if (featuresZ14.length || featuresZ17.length) {
+                drawKmlOverlay("z14", featuresZ14);
+                drawKmlOverlay("z17", featuresZ17);
+                map.fitBounds(globalBounds, { padding: 50, maxZoom: 15 });
+                updateKmlVisibility(); // ensure correct initial visibility
+            } else {
+                alert("No valid polygons found in the KML file.");
             }
         }
-
-        const feature = { type: 'Feature', geometry: { type: 'Polygon', coordinates: allRings } };
-
-        // Decide which group this polygon belongs to:
-        const parentName = poly.closest("Placemark")?.getElementsByTagName("name")[0]?.textContent || "";
-        if (parentName.includes("17") || parentName.toLowerCase().includes("squadratinho")) {
-            featuresZ17.push(feature);
-        } else {
-            featuresZ14.push(feature);
-        }
-    }
-
-    if (featuresZ14.length || featuresZ17.length) {
-        drawKmlOverlay("z14", featuresZ14);
-        drawKmlOverlay("z17", featuresZ17);
-        map.fitBounds(globalBounds, { padding: 50, maxZoom: 15 });
-        updateKmlVisibility(); // ensure correct initial visibility
-    } else {
-        alert("No valid polygons found in the KML file.");
-    }
-}
 
         function drawKmlOverlay(suffix, features) {
             const sourceId = `kml-${suffix}-source`;
@@ -734,7 +733,7 @@ if (savedConsent === 'granted') {
             onAdd() {
                 this._container = document.createElement('div');
                 this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group maplibregl-ctrl-kml-upload';
-                this._container.innerHTML = `<span class="label">NEW! Upload KML from squadrats.com</span><input type="file" accept=".kml">`;
+                this._container.innerHTML = `<span class="label"><b>NEW!</b> Upload KML from squadrats.com</span><input type="file" accept=".kml">`;
                 this._container.querySelector('input').addEventListener('change', (e) => {
                     const file = e.target.files[0];
                     if (file) {
