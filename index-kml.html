@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TileIQ - Tile selection tool</title> <link href='https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <script src='https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js'></script>
+    <style>
+        /* Basic styling */
+        html, body {
+            height: 100%; width: 100%; margin: 0; padding: 0;
+            font-family: sans-serif; display: flex; flex-direction: column; overflow: hidden;
+        }
+        #map { flex-grow: 1; width: 100%; background-color: #f0f0f0; }
+        #bottombar {
+            height: auto; min-height: 100px; width: 100%; overflow-y: auto;
+            padding: 5px 10px; box-sizing: border-box; border-top: 1px solid #ccc;
+            background-color: #f8f9fa; display: flex; flex-direction: column;
+        }
+        #bottombar span { font-size: 0.85em; line-height: 1.4; margin-bottom: 5px; }
+        #outputString {
+            width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 3px;
+            font-family: monospace; font-size: 0.8em; resize: none; white-space: pre;
+            overflow-wrap: normal; overflow-x: auto; margin-bottom: 5px;
+        }
+        #copyButton {
+            padding: 5px 10px; font-size: 0.9em; cursor: pointer; background-color: #6c757d;
+            color: white; border: none; border-radius: 3px; align-self: flex-start;
+        }
+        #copyButton:hover { background-color: #5a6268; }
+        #copyButton.copied { background-color: #28a745; }
+
+        /* Popup styling (MapLibre specific class) */
+        .maplibregl-popup-content {
+             padding: 10px; font-size: 1em; max-width: 220px !important; /* Increase max-width slightly */
+             word-wrap: break-word; border-radius: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+             line-height: 1.4; /* Adjust line spacing */
+        }
+        /* Custom class for our naming popup */
+        .naming-popup-content { margin: 0; } /* Reset margin if needed */
+        .naming-popup-content div { margin-bottom: 5px; } /* Spacing */
+        .naming-popup-content b { display: block; margin-bottom: 3px; } /* Tile ID bold */
+        .naming-popup-content input[type="text"] { width: calc(100% - 12px); padding: 5px; margin-bottom: 8px; border: 1px solid #ccc; border-radius: 3px; box-sizing: border-box; font-size: 16px }
+        .naming-popup-content button { padding: 5px 10px; border: none; background-color: #28a745; color: white; border-radius: 3px; cursor: pointer; margin-right: 5px; }
+        .naming-popup-content button:hover { background-color: #218838; }
+        .naming-popup-content button.deselect-button { background-color: #dc3545; }
+        .naming-popup-content button.deselect-button:hover { background-color: #c82333; }
+
+        /* Grid Toggle Control Styling (using MapLibre conventions where possible) */
+         .maplibregl-ctrl-bottom-left .maplibregl-ctrl { /* Target controls in bottom-left */
+             margin-bottom: 50px; /* Add some margin */
+             clear: none; /* Override default clear */
+         }
+        .maplibregl-ctrl-grid-toggle { /* Custom class for the control container */
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 15px; /* User's radius */
+            box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+            display: flex;
+            cursor: pointer;
+            border: 1px solid #ccc; /* Add slight border like other controls */
+            line-height: 1; /* Prevent extra space */
+        }
+        .maplibregl-ctrl-grid-toggle span {
+            padding: 6px 10px;
+            font-size: 12px; /* Match typical MapLibre control font size */
+            text-align: center;
+            color: #333;
+            white-space: nowrap;
+            user-select: none; /* Prevent text selection */
+        }
+        .maplibregl-ctrl-grid-toggle span:first-child {
+             border-top-left-radius: 14px; /* Adjust for border */
+             border-bottom-left-radius: 14px;
+             border-right: 1px solid #ccc; /* Separator */
+        }
+         .maplibregl-ctrl-grid-toggle span:last-child {
+             border-top-right-radius: 14px;
+             border-bottom-right-radius: 14px;
+         }
+        .maplibregl-ctrl-grid-toggle span.active {
+            background-color: #007bff;
+            color: white;
+            font-weight: bold;
+        }
+         .maplibregl-ctrl-grid-toggle span:not(.active):hover {
+             background-color: #f4f4f4;
+         }
+        /* Style for the page body to prevent scrolling when modal is open (optional) */
+        body.modal-open {
+            overflow: hidden;
+        }
+
+        /* KML Upload Button Control Styling */
+        .maplibregl-ctrl-top-left .mapliblibregl-ctrl { /* Target controls in top-left */
+            /* Add some spacing below the geolocate control, etc. */
+            margin-top: 10px;
+        }
+        .maplibregl-ctrl-kml-upload {
+            /* Standard MapLibre control button styling */
+            background-color: #fff;
+            border-radius: 4px;
+            box-shadow: 0 0 0 2px rgba(0,0,0,.1);
+            margin: 10px;
+            padding: 0;
+            cursor: pointer;
+            width: 30px; /* Standard MapLibre button size */
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden; /* Hide the file input scrollbar */
+            position: relative;
+        }
+
+        .maplibregl-ctrl-kml-upload input[type="file"] {
+            /* Hide the actual file input but keep it clickable/functional */
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 1; /* Ensure it's above the button text */
+        }
+
+        .maplibregl-ctrl-kml-upload span {
+            /* The visible label */
+            font-weight: bold;
+            font-size: 10px;
+            color: #333;
+            line-height: 30px; /* Center text vertically */
+            text-align: center;
+            width: 100%;
+            height: 100%;
+            background-color: #007bff; /* Primary color for "NEW" */
+            color: white;
+        }
+
+        .maplibregl-ctrl-kml-upload:hover span {
+            background-color: #0056b3; /* Darker hover */
+        }
+
+        /* Full screen overlay */
+        #consent-overlay {
+            position: fixed; /* Cover the entire viewport */
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black background */
+            z-index: 999; /* Below the modal, above other content */
+            display: none; /* Hidden by default */
+            justify-content: center; /* Center horizontally */
+            align-items: center; /* Center vertically */
+            padding: 20px; /* Add padding for smaller screens */
+            box-sizing: border-box;
+        }
+
+        /* The actual modal box */
+        #consent-banner {
+            /* Remove previous fixed positioning and full width */
+            background-color: #ffffff; /* White background for the box */
+            color: #333;
+            padding: 25px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); /* Modal shadow */
+            z-index: 1000; /* Ensure modal is above the overlay */
+            text-align: center;
+            max-width: 500px; /* Max width of the modal */
+            width: 100%;     /* Take available width up to max-width */
+            box-sizing: border-box;
+            /* display: block; // Not needed, flex item default */
+            position: relative; /* Needed if you want to position elements inside absolutely */
+        }
+
+        #consent-banner p {
+            margin: 0 0 20px 0; /* More spacing below text */
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        /* Optional wrapper for buttons if you want specific layout */
+        .consent-buttons {
+            display: flex;
+            justify-content: center; /* Center buttons */
+            gap: 15px; /* Space between buttons */
+            flex-wrap: wrap; /* Allow buttons to wrap on small screens */
+        }
+
+        #consent-banner button {
+            padding: 10px 20px; /* Slightly larger buttons */
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            min-width: 100px; /* Minimum width for buttons */
+            /* Remove margin if using gap in flex container */
+        }
+
+        #consent-banner #consent-accept {
+            background-color: #84d287; /* Green */
+            color: white;
+            order: 1; /* Optional: Control button order */
+        }
+
+        #consent-banner #consent-deny {
+            background-color: #f67269; /* Red */
+            color: white;
+            order: 2; /* Optional: Control button order */
+        }
+
+    </style>
+    <script>  
+
+document.addEventListener('DOMContentLoaded', function() {
+
+// --- Configuration ---
+const GA4_TRACKING_ID = 'G-MP2YQKFTLE';
+
+// --- DOM Element References ---
+// Get references to the necessary HTML elements
+const consentOverlay = document.getElementById('consent-overlay');
+const consentBanner = document.getElementById('consent-banner'); // Modal box itself
+const acceptButton = document.getElementById('consent-accept');
+const denyButton = document.getElementById('consent-deny');
+
+// --- Essential Functions ---
+
+/**
+ * Loads the Google Analytics scripts (GA4 and optionally UA).
+ * This function is called only *after* consent is granted.
+ */
+function loadGoogleAnalytics() {
+
+    // --- GA4 (gtag.js) - Recommended ---
+    if (GA4_TRACKING_ID && GA4_TRACKING_ID !== 'G-XXXXXXXXXX') {
+        // Create the GA4 script tag
+        const ga4Script = document.createElement('script');
+        ga4Script.async = true;
+        ga4Script.src = `https://www.googletagmanager.com/gtag/js?id=${GA4_TRACKING_ID}`;
+        // Add the script tag to the <head> of the document
+        document.head.appendChild(ga4Script);
+
+        // Initialize the dataLayer and gtag function for GA4
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        // Configure GA4 with the provided tracking ID
+        gtag('config', GA4_TRACKING_ID);
+        console.log(`GA4 configured with ID: ${GA4_TRACKING_ID}`);
+    } else {
+         console.log("GA4 Tracking ID not provided");
+    }
+}
+    
+/**
+ * Hides the consent overlay and modal box.
+ * Also re-enables scrolling on the main page content.
+ */
+function hideConsentUI() {
+    if (consentOverlay) {
+        consentOverlay.style.display = 'none'; // Hide the overlay
+        // Allow the body to scroll again
+        document.body.classList.remove('modal-open');
+    }
+}
+
+ /**
+  * Shows the consent overlay and modal box.
+  * Also prevents scrolling on the main page content.
+  */
+function showConsentUI() {
+     if (consentOverlay) {
+        // Show the overlay using flex display for centering
+        consentOverlay.style.display = 'flex';
+        // Prevent the body from scrolling while the modal is open
+        document.body.classList.add('modal-open');
+    }
+}
+
+/**
+ * Handles the user clicking the "Accept" button.
+ * Stores the consent choice, hides the UI, and loads GA.
+ */
+function grantConsent() {
+    // Store the choice in local storage
+    localStorage.setItem('user_consent_analytics_v1', 'granted');
+    // Hide the modal and overlay
+    hideConsentUI();
+    // Load Google Analytics scripts
+    loadGoogleAnalytics();
+}
+
+/**
+ * Handles the user clicking the "Deny" button.
+ * Stores the consent choice and hides the UI. Does NOT load GA.
+ */
+function denyConsent() {
+    // Store the choice in local storage
+    localStorage.setItem('user_consent_analytics_v1', 'denied');
+    // Hide the modal and overlay
+    hideConsentUI();
+    // Analytics scripts are NOT loaded
+}
+
+// --- Initialization Logic ---
+
+// First, check if all necessary HTML elements are present
+if (!consentOverlay || !consentBanner || !acceptButton || !denyButton) {
+    console.error("Consent UI HTML elements not found. Cannot initialize consent logic.");
+    // Stop execution if elements are missing
+    return;
+}
+
+// Check if a consent decision has already been stored from a previous visit
+const savedConsent = localStorage.getItem('user_consent_analytics_v1');
+
+// --- Decision Logic ---
+if (savedConsent === 'granted') {
+    // If consent was already granted, load GA immediately
+    loadGoogleAnalytics();
+    hideConsentUI();
+} else if (savedConsent === 'denied') {
+    hideConsentUI();
+} else {
+    // If no decision is stored ('null'), show the consent modal
+    showConsentUI();
+
+    // Add event listeners to the buttons - only needed if the banner is shown
+    acceptButton.addEventListener('click', grantConsent);
+    denyButton.addEventListener('click', denyConsent);
+}
+
+});
+
+    </script>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div id="bottombar">
+      <span><strong>How to sync the tiles:</strong><br></span>
+      <span>- Select and name your tiles, then copy the text below<br>- In Garmin Connect, find and open your device<br>- Activities, Apps & More > Data fields > TileIQ<br>- Paste this text in the settings and sync your device</span>
+      <textarea id="outputString" readonly rows="2"></textarea>
+      <button id="copyButton">Click to copy</button>
+    </div>
+
+    <div id="consent-overlay"> 
+        <div id="consent-banner">
+            <p>
+                Hey, can I load <strong>Google Analytics</strong> here? I'm just curious
+                to see how much this is used. No other tracking cookies, I promise 😀.
+            </p>
+            <div class="consent-buttons"> <button id="consent-accept">Sure! 👌</button>
+                <button id="consent-deny">No thanks 🫥</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="kml-upload-control-container" class="maplibregl-ctrl-top-left maplibregl-ctrl">
+        <div class="maplibregl-ctrl-kml-upload" title="Import KML downloaded from squadrats.com">
+            <input type="file" id="kml-upload-input" accept=".kml">
+            <span>NEW</span>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Configuration ---
+        const MIN_GRID_ZOOM = 11; // Min map zoom to display grid overlay
+        const MAPTILER_API_KEY = "5xvmU2oirJBc6iLf4Q2Y";
+
+        // --- State Management ---
+        let selectedTiles = {}; // Key: tileId (z14/z17), Value: { name, sw, ne, selected, uniqueId }
+        let selectedTileOrder = []; // Order of selection
+        let gridDisplayZoomLevel = 14; // Current grid/selection level
+        let nextTileUniqueId = 1; // Counter for persistent IDs
+        let currentPopup = null; // Reference to the currently open MapLibre popup
+
+        // --- Map Initialization ---
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_API_KEY}`,
+            center: [6.149183284512431, 45.8999526477542],
+            zoom: 12 // User's initial zoom
+        });
+
+        // --- Add Map Controls ---
+        map.addControl(new maplibregl.NavigationControl(), 'top-left');
+        map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+        // Use MapLibre's GeolocateControl
+        const geolocate = new maplibregl.GeolocateControl({
+             positionOptions: { enableHighAccuracy: true },
+             trackUserLocation: false, // Set true to continuously track
+             showUserHeading: true
+        });
+        map.addControl(geolocate, 'top-left');
+
+        // --- Calculation Functions ---
+        function deg2rad(d) { return d * Math.PI / 180; }
+        function rad2deg(r) { return r * 180 / Math.PI; }
+        function yTileToLatDeg(y, z) { const n = Math.pow(2, z); const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))); return rad2deg(latRad); }
+        function xTileToLonDeg(x, z) { const n = Math.pow(2, z); return x / n * 360.0 - 180.0; }
+        function lonDegToXTile(lon, z) { const n = Math.pow(2, z); const xTile = Math.floor((lon + 180) / 360 * n); return (lon === 180) ? n - 1 : xTile; }
+        function latDegToYTile(lat, z) { const n = Math.pow(2, z); const latClamped = Math.max(-85.05112878, Math.min(85.05112878, lat)); const latRad = deg2rad(latClamped); const yTile = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n); return (yTile >= n) ? n - 1 : yTile; }
+
+        function getTileBounds(x, y, z) {
+            const lat_ne = yTileToLatDeg(y, z);
+            const lon_sw = xTileToLonDeg(x, z);
+            const lat_sw = yTileToLatDeg(y + 1, z);
+            const lon_ne = xTileToLonDeg(x + 1, z);
+            // Return simple structure, Leaflet bounds object no longer needed
+            return { sw: [lat_sw, lon_sw], ne: [lat_ne, lon_ne] };
+        }
+        function generateTileId(x, y, z) { return `z${z}-${x}-${y}`; }
+
+        // --- GeoJSON Generation ---
+        // Function to generate GeoJSON for grid lines
+        function generateGridGeoJson(bounds, displayZ) {
+            const features = [];
+            const tileCountZ = Math.pow(2, displayZ);
+            const degPerTileLonZ = 360 / tileCountZ;
+
+            const west = bounds.getWest(); const east = bounds.getEast();
+            const south = bounds.getSouth(); const north = bounds.getNorth();
+
+            // Vertical lines (Longitude)
+            const kMinLon = Math.floor((west + 180) / degPerTileLonZ);
+            const kMaxLon = Math.ceil((east + 180) / degPerTileLonZ);
+            for (let k = kMinLon; k <= kMaxLon; k++) {
+                const lon = xTileToLonDeg(k, displayZ);
+                // Create LineString feature: [[lon, south], [lon, north]] (Lon, Lat order)
+                features.push({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: [[lon, south], [lon, north]] },
+                    properties: {}
+                });
+            }
+            // Horizontal lines (Latitude)
+            const yMin = latDegToYTile(north, displayZ);
+            const yMax = latDegToYTile(south, displayZ);
+            for (let y = yMin; y <= yMax + 1; y++) {
+                const lat = yTileToLatDeg(y, displayZ);
+                 // Create LineString feature: [[west, lat], [east, lat]] (Lon, Lat order)
+                 features.push({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: [[west, lat], [east, lat]] },
+                    properties: {}
+                });
+            }
+            return { type: 'FeatureCollection', features: features };
+        }
+
+        // Function to generate GeoJSON for selected tile highlights
+        function generateHighlightGeoJson() {
+            const features = [];
+            selectedTileOrder.forEach(tileId => {
+                const tile = selectedTiles[tileId];
+                if (tile && tile.selected && tile.sw && tile.ne) {
+                    const minLat = tile.sw[0]; const minLon = tile.sw[1];
+                    const maxLat = tile.ne[0]; const maxLon = tile.ne[1];
+                    // Create Polygon feature: needs closed loop in [Lon, Lat] order
+                    const coordinates = [
+                        [ [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat] ]
+                    ];
+                    features.push({
+                        type: 'Feature',
+                        geometry: { type: 'Polygon', coordinates: coordinates },
+                        properties: { tileId: tileId } // Include ID if needed later
+                    });
+                }
+            });
+            return { type: 'FeatureCollection', features: features };
+        }
+
+
+        // --- Grid Drawing Function (MapLibre) ---
+        function drawGrid() {
+            const currentZoom = map.getZoom();
+            const source = map.getSource('grid-source');
+
+            if (currentZoom >= MIN_GRID_ZOOM - 0.5) { // Use threshold slightly below integer zoom
+                // Use MapLibre's getBounds()
+              const bounds = map.getBounds();
+              const geojsonData = generateGridGeoJson(bounds, gridDisplayZoomLevel);
+
+                if (source) {
+                    source.setData(geojsonData); // Update existing source
+                } else if (map.isStyleLoaded()) { // Check if style is loaded before adding
+                    map.addSource('grid-source', { type: 'geojson', data: geojsonData });
+                    map.addLayer({
+                        id: 'grid-layer',
+                        type: 'line',
+                        source: 'grid-source',
+                        paint: {
+                            'line-color': '#FF0000',
+                            'line-width': 0.5,
+                            'line-opacity': 0.6
+                        }
+                    });
+                }
+                 // Make sure layer is visible if it exists
+                 if(map.getLayer('grid-layer')) { map.setLayoutProperty('grid-layer', 'visibility', 'visible');}
+
+            } else {
+                 // Hide grid layer if below zoom threshold
+                 if(map.getLayer('grid-layer')) { map.setLayoutProperty('grid-layer', 'visibility', 'none');}
+            }
+        }
+
+        // --- Selected Tile Highlighting (MapLibre) ---
+        function redrawSelectedHighlights() {
+            const source = map.getSource('highlight-source');
+            const geojsonData = generateHighlightGeoJson();
+
+            if (source) {
+                source.setData(geojsonData); // Update existing source
+            } else if (map.isStyleLoaded()) { // Check if style is loaded
+                map.addSource('highlight-source', { type: 'geojson', data: geojsonData });
+                // Add Fill layer
+                map.addLayer({
+                    id: 'highlight-fill-layer',
+                    type: 'fill',
+                    source: 'highlight-source',
+                    paint: {
+                        'fill-color': '#007bff',
+                        'fill-opacity': 0.3
+                    }
+                });
+                // Add Outline layer
+                 map.addLayer({
+                    id: 'highlight-outline-layer',
+                    type: 'line',
+                    source: 'highlight-source',
+                    paint: {
+                        'line-color': '#0056b3',
+                        'line-width': 1
+                    }
+                });
+            }
+        }
+
+        // --- KML Parsing and Drawing ---
+        const visitedTiles = {}; // Stores all unique tile IDs from the KML
+        
+        function drawVisitedHighlights() {
+            const features = [];
+            // Convert each stored tile ID back into a GeoJSON Polygon feature
+            Object.keys(visitedTiles).forEach(tileId => {
+                const parts = tileId.split('-'); // e.g., 'z14-200-100'
+                const z = parseInt(parts[0].substring(1));
+                const x = parseInt(parts[1]);
+                const y = parseInt(parts[2]);
+                
+                const tileBounds = getTileBounds(x, y, z);
+                
+                const minLat = tileBounds.sw[0]; const minLon = tileBounds.sw[1];
+                const maxLat = tileBounds.ne[0]; const maxLon = tileBounds.ne[1];
+                
+                const coordinates = [
+                    [ [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat] ]
+                ];
+                
+                features.push({
+                    type: 'Feature',
+                    geometry: { type: 'Polygon', coordinates: coordinates },
+                    properties: { tileId: tileId }
+                });
+            });
+            
+            const geojsonData = { type: 'FeatureCollection', features: features };
+
+            const source = map.getSource('visited-source');
+
+            if (source) {
+                source.setData(geojsonData);
+            } else if (map.isStyleLoaded()) {
+                map.addSource('visited-source', { type: 'geojson', data: geojsonData });
+                map.addLayer({
+                    id: 'visited-fill-layer',
+                    type: 'fill',
+                    source: 'visited-source',
+                    paint: {
+                        // Color: Light Gray (e.g., #808080) with 60% opacity
+                        'fill-color': '#808080', 
+                        'fill-opacity': 0.6 
+                    },
+                    // Place below the highlight layers
+                    before: 'highlight-fill-layer' 
+                });
+            }
+        }
+
+
+        function parseKML(kmlText) {
+            console.log("Starting KML parsing...");
+            const parser = new DOMParser();
+            const kmlDoc = parser.parseFromString(kmlText, "text/xml");
+            
+            // Check for KML parsing errors
+            if (kmlDoc.getElementsByTagName("parsererror").length > 0) {
+                console.error("KML Parse Error:", kmlDoc.getElementsByTagName("parsererror")[0].textContent);
+                alert("Error parsing KML file. Please ensure it is a valid KML structure.");
+                return;
+            }
+
+            const coordinatesElements = kmlDoc.getElementsByTagName('coordinates');
+            
+            if (coordinatesElements.length === 0) {
+                alert("Could not find any <coordinates> data in the KML file.");
+                return;
+            }
+
+            // Clear previous visited tiles
+            Object.keys(visitedTiles).forEach(key => delete visitedTiles[key]); 
+
+            for (let i = 0; i < coordinatesElements.length; i++) {
+                const coordsText = coordinatesElements[i].textContent.trim();
+                if (!coordsText) continue;
+
+                // The KML has coordinates in Lon,Lat,Alt format. We only need Lon,Lat.
+                // We're expecting a huge polygon boundary which is the union of all tiles.
+                // It's much faster to iterate over the bounding box of the whole polygon 
+                // and check every tile inside it, than to use complex geometry libraries.
+                
+                const points = coordsText.split(/\s+/).map(p => {
+                    const parts = p.split(',');
+                    return [parseFloat(parts[0]), parseFloat(parts[1])]; // [Lon, Lat]
+                });
+                
+                if (points.length < 3) continue; // Not a valid polygon
+
+                // Calculate bounding box for the entire polygon
+                let minLon = points[0][0], maxLon = points[0][0];
+                let minLat = points[0][1], maxLat = points[0][1];
+                points.forEach(p => {
+                    minLon = Math.min(minLon, p[0]);
+                    maxLon = Math.max(maxLon, p[0]);
+                    minLat = Math.min(minLat, p[1]);
+                    maxLat = Math.max(maxLat, p[1]);
+                });
+                
+                // Get tiles for Z14
+                const z14MinX = lonDegToXTile(minLon, 14);
+                const z14MaxX = lonDegToXTile(maxLon, 14);
+                const z14MinY = latDegToYTile(maxLat, 14); // Note: Y tile index decreases with increasing latitude
+                const z14MaxY = latDegToYTile(minLat, 14);
+
+                // Iterate over the bounding box of Z14 tiles
+                for (let x = z14MinX; x <= z14MaxX; x++) {
+                    for (let y = z14MinY; y <= z14MaxY; y++) {
+                        const tileId = generateTileId(x, y, 14);
+                        // We assume all tiles inside the KML boundary are "visited"
+                        // This is a common and efficient simplification for this use case.
+                        visitedTiles[tileId] = true;
+                    }
+                }
+                
+                // Get tiles for Z17
+                const z17MinX = lonDegToXTile(minLon, 17);
+                const z17MaxX = lonDegToXTile(maxLon, 17);
+                const z17MinY = latDegToYTile(maxLat, 17);
+                const z17MaxY = latDegToYTile(minLat, 17);
+
+                // Iterate over the bounding box of Z17 tiles
+                for (let x = z17MinX; x <= z17MaxX; x++) {
+                    for (let y = z17MinY; y <= z17MaxY; y++) {
+                        const tileId = generateTileId(x, y, 17);
+                        visitedTiles[tileId] = true;
+                    }
+                }
+            }
+
+            console.log(`Successfully parsed KML. Found ${Object.keys(visitedTiles).length} unique tiles.`);
+            drawVisitedHighlights();
+            pingAnalytics('kml_imported');
+            alert(`KML imported! ${Object.keys(visitedTiles).length} unique tiles loaded.`);
+        }
+        
+        // --- Add File Upload Event Listener ---
+        document.addEventListener('DOMContentLoaded', function() {
+            const kmlInput = document.getElementById('kml-upload-input');
+            if (kmlInput) {
+                kmlInput.addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            parseKML(e.target.result);
+                        };
+                        reader.onerror = (e) => {
+                            console.error("Error reading file:", e);
+                            alert("Error reading file. Please try again.");
+                        };
+                        reader.readAsText(file);
+                    }
+                    // Reset the file input so the same file can be uploaded again
+                    event.target.value = '';
+                });
+            }
+        });
+        
+
+        function pingAnalytics(data) {
+            return new Promise((resolve) => {
+                url = 'https://www.google-analytics.com/mp/collect?measurement_id=G-MP2YQKFTLE&api_secret=yiKj-8dKTVuW4OtzNR-QmQ'
+                fetch(url,
+                    {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            events: [
+                                {
+                                name: data
+                                },
+                            ],
+                        }),
+                    })
+                .then(response => resolve(response))
+                .catch(error => {
+                    console.error("Error pinging Analytics:", error);
+                });
+            })
+        }
+        // --- Analytics Ping ---
+        function pingAnalytics(eventName) { // Changed parameter name for clarity
+            const savedConsent = localStorage.getItem('user_consent_analytics_v1');
+            if (savedConsent !== 'granted') {
+                console.log("Analytics consent not granted, skipping MP ping.");
+                return Promise.resolve(); // Don't ping if no consent
+            }
+
+            // --- Add client_id ---
+            let clientId = localStorage.getItem('tileiq_mp_client_id');
+            if (!clientId) {
+                // Generate a simple pseudo-unique ID if one doesn't exist
+                clientId = Date.now() + '.' + Math.random().toString(36).substring(2);
+                localStorage.setItem('tileiq_mp_client_id', clientId);
+                console.log("Generated new MP client_id:", clientId);
+            }
+            // --- End: Add client_id ---
+
+
+            return new Promise((resolve) => {
+                const url = 'https://www.google-analytics.com/mp/collect?measurement_id=G-MP2YQKFTLE&api_secret=yiKj-8dKTVuW4OtzNR-QmQ';
+                const payload = {
+                    client_id: clientId, // Include the client_id here
+                    events: [{
+                        name: eventName, // Use the event name passed to the function
+                        params: {} // Add any relevant parameters if needed later
+                    }],
+                };
+
+                console.log("Pinging Analytics with payload:", JSON.stringify(payload)); // Log the payload
+
+                fetch(url, {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                })
+                .then(response => {
+                    // Log the response status for debugging
+                    if (!response.ok && response.status !== 204) { // 204 is ok
+                       console.error(`Analytics ping failed with status: ${response.status}`);
+                    }
+                     resolve(response);
+                })
+                .catch(error => {
+                    console.error(`Error pinging Analytics for '${eventName}':`, error);
+                    resolve(); // Resolve even on fetch error to not block other code
+                });
+            });
+        }
+      
+        // --- Update Output String Display ---
+        function updateOutputString() {
+            const outputElement = document.getElementById('outputString');
+            if (!outputElement) return;
+            const outputItems = [];
+            selectedTileOrder.forEach(tileId => {
+                const tile = selectedTiles[tileId];
+                if (tile && tile.selected && tile.hasOwnProperty('uniqueId')) {
+                    const lon_sw_orig = tile.sw[1]; const lat_sw_orig = tile.sw[0];
+                    const lon_ne_orig = tile.ne[1]; const lat_ne_orig = tile.ne[0];
+                    const factor = 1e8;
+                    const lon_sw = Math.trunc(lon_sw_orig * factor) / factor;
+                    const lat_sw = Math.trunc(lat_sw_orig * factor) / factor;
+                    const lon_ne = Math.trunc(lon_ne_orig * factor) / factor;
+                    const lat_ne = Math.trunc(lat_ne_orig * factor) / factor;
+                    const label = tile.name || 'Unnamed';
+                    const itemString = `${tile.uniqueId}^${label}^${lon_sw}^${lat_sw}^${lon_ne}^${lat_ne}`;
+                    outputItems.push(itemString);
+                } else if (tile && tile.selected) { console.warn(`Tile ${tileId} selected but missing uniqueId!`); }
+            });
+            const outputString = outputItems.join('|');
+            outputElement.value = outputString;
+        }
+
+
+        // --- Interaction Functions ---
+        function saveTileName(tileId) {
+            const inputElement = document.getElementById('tileNameInput_' + tileId);
+            const tileName = inputElement ? inputElement.value.trim() : '';
+            tilename = tileName.replaceAll(/[\|\^]/g, ''); 
+            const tileData = selectedTiles[tileId];
+            if (!tileData.hasOwnProperty('uniqueId')) { tileData.uniqueId = nextTileUniqueId++; console.log(`Assigned uniqueId ${tileData.uniqueId} to ${tileId}`); }
+            if (!selectedTileOrder.includes(tileId)) { selectedTileOrder.push(tileId); console.log('Added to order:', tileId); }
+            if (!tileData) { console.error("Could not find tile data for ID:", tileId); if (currentPopup) { currentPopup.remove(); } return; }
+            tileData.name = tileName.replaceAll(/[\|\^]/g, '') || "Tile_" + tileData.uniqueId;
+            tileData.selected = true;
+            if (currentPopup) { currentPopup.remove(); } // Close popup
+            redrawSelectedHighlights();
+            updateOutputString();
+            pingAnalytics('save_tile');
+        }
+
+        function deselectTile(tileId) {
+             if (selectedTiles[tileId]) {
+                 selectedTiles[tileId].selected = false;
+                 const index = selectedTileOrder.indexOf(tileId);
+                 if (index > -1) { selectedTileOrder.splice(index, 1); console.log('Removed from order:', tileId); }
+                 if (currentPopup) { currentPopup.remove(); } // Close popup
+                 redrawSelectedHighlights();
+                 updateOutputString();
+             }
+         }
+
+        function openNamingPopup(tileId, lngLat, tileBoundsData) { // lngLat is MapLibre LngLat object
+             // Close previous popup if open
+             if (currentPopup) { currentPopup.remove(); }
+
+             const currentData = selectedTiles[tileId];
+             const currentName = currentData?.name || '';
+             const isSelected = currentData?.selected || false;
+
+             // Ensure data exists, using bounds passed from click handler
+             if (!currentData) {
+                  selectedTiles[tileId] = { name: '', sw: tileBoundsData.sw, ne: tileBoundsData.ne, selected: false };
+             } else {
+                  // Update coords just in case, though unlikely to change for a given tile ID
+                   selectedTiles[tileId].sw = tileBoundsData.sw;
+                   selectedTiles[tileId].ne = tileBoundsData.ne;
+             }
+
+             const popupContentDiv = document.createElement('div');
+             popupContentDiv.className = 'naming-popup-content'; // Add class for styling
+
+             let buttonsHTML = `<button onclick="saveTileName('${tileId}')">Save Name</button>`;
+             if (isSelected) {
+                 buttonsHTML += `<button class="deselect-button" onclick="deselectTile('${tileId}')">Deselect</button>`;
+             }
+
+             popupContentDiv.innerHTML = `<b>Name this tile:</b><br>
+                                          <input type="text" id="tileNameInput_${tileId}" placeholder="Enter name..." value="${currentName}">
+                                          <div>${buttonsHTML}</div>`; // Wrap buttons in div if needed
+
+             currentPopup = new maplibregl.Popup({ closeOnClick: true, closeButton: true, maxWidth: '240px' }) // Adjust max width
+                 .setLngLat(lngLat) // Use MapLibre LngLat object or [lon, lat] array
+                 .setDOMContent(popupContentDiv) // Use setDOMContent for interactive elements
+                 .addTo(map);
+
+             // Focus input after popup is potentially opened
+             setTimeout(() => {
+                 const input = document.getElementById('tileNameInput_' + tileId);
+                 if (input) { input.focus(); input.select(); }
+             }, 100); // Timeout might need adjustment
+         }
+
+        // --- Custom Grid Toggle Control (MapLibre) ---
+        class GridToggleControl {
+             onAdd(mapInstance) {
+                 this._map = mapInstance;
+                 this._container = document.createElement('div');
+                 this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group maplibregl-ctrl-grid-toggle'; // Use MapLibre classes + custom one
+
+                 const spanZ14 = document.createElement('span');
+                 const spanZ17 = document.createElement('span');
+                 spanZ14.id = 'toggle-z14'; spanZ14.textContent = 'Tiles/Squadrats';
+                 spanZ17.id = 'toggle-z17'; spanZ17.textContent = 'Squadratinhos';
+
+                 this._container.appendChild(spanZ14);
+                 this._container.appendChild(spanZ17);
+
+                 // Set initial active state
+                 this.updateActiveState(spanZ14, spanZ17);
+
+                 // Add event listeners
+                 spanZ14.addEventListener('click', () => {
+                     if (gridDisplayZoomLevel !== 14) {
+                         gridDisplayZoomLevel = 14;
+                         this.updateActiveState(spanZ14, spanZ17);
+                         drawGrid(); // Redraw grid
+                     }
+                 });
+                 spanZ17.addEventListener('click', () => {
+                     if (gridDisplayZoomLevel !== 17) {
+                         gridDisplayZoomLevel = 17;
+                         this.updateActiveState(spanZ14, spanZ17);
+                         drawGrid(); // Redraw grid
+                     }
+                 });
+
+                 return this._container;
+             }
+
+             updateActiveState(spanZ14, spanZ17) {
+                 if (gridDisplayZoomLevel === 14) {
+                     spanZ14.classList.add('active');
+                     spanZ17.classList.remove('active');
+                 } else {
+                     spanZ17.classList.add('active');
+                     spanZ14.classList.remove('active');
+                 }
+             }
+
+             onRemove() {
+                 this._container.parentNode.removeChild(this._container);
+                 this._map = undefined;
+             }
+         }
+         // Add the custom control
+         map.addControl(new GridToggleControl(), 'bottom-left');
+
+
+        // --- Map Event Listeners ---
+        map.on('load', () => {
+             console.log('Map style loaded.');
+             // It's safer to add sources/layers and redraw highlights/grid here
+             // in case they were called before the style finished loading initially.
+             redrawSelectedHighlights(); // Draw initial highlights if any
+             drawGrid(); // Draw initial grid
+        });
+
+        map.on('moveend', drawGrid); // Update grid on move end
+        map.on('zoomend', drawGrid); // Update grid on zoom end
+
+
+        // Map Click Handler (MapLibre)
+        map.on('click', (e) => {
+            // Don't trigger tile selection if clicking on a control (like geolocate)
+             if (e.originalEvent.target.closest('.maplibregl-ctrl')) {
+                 return;
+             }
+
+             const lon = e.lngLat.lng;
+             const lat = e.lngLat.lat;
+
+             const currentSelectionZoom = gridDisplayZoomLevel;
+             const tileX = lonDegToXTile(lon, currentSelectionZoom);
+             const tileY = latDegToYTile(lat, currentSelectionZoom);
+             const tileId = generateTileId(tileX, tileY, currentSelectionZoom);
+             const tileBoundsData = getTileBounds(tileX, tileY, currentSelectionZoom); // Get {sw, ne}
+
+             openNamingPopup(tileId, e.lngLat, tileBoundsData); // Pass MapLibre LngLat object
+        });
+
+
+        // --- Copy Button Logic ---
+        const copyButton = document.getElementById('copyButton');
+        const outputTextArea = document.getElementById('outputString');
+        if (copyButton && outputTextArea) {
+            /* ... No changes needed here ... */
+            copyButton.addEventListener('click', () => {
+                const textToCopy = outputTextArea.value;
+                if (!textToCopy) {
+                    return;
+                }
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        const originalText = copyButton.textContent;
+                        copyButton.textContent = 'Copied!';
+                        copyButton.classList.add('copied');
+                        pingAnalytics('copied_tiles');
+                        setTimeout(() => {
+                            copyButton.textContent = originalText;
+                            copyButton.classList.remove('copied');
+                        }, 1500);
+                    }).catch(err => {
+                        console.error('Failed to copy text: ', err);
+                        alert('Failed to copy text.');
+                    });
+                } else {
+                    console.warn('Clipboard API not available.');
+                    alert('Copying failed. Please copy manually.');
+                }
+            });
+        }
+
+        // --- Initial Draw Call (After map setup) ---
+        // Note: Drawing now primarily happens after 'load' event for layers
+        updateOutputString(); // Update output display initially
+
+    </script>
+
+</body>
+</html>
