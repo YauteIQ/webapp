@@ -372,19 +372,18 @@ if (savedConsent === 'granted') {
         </div>
     </div>
 
-
     <script>
         // --- Configuration ---
         const MIN_GRID_ZOOM = 11; // Min map zoom to display grid overlay
         const MAPTILER_API_KEY = "5xvmU2oirJBc6iLf4Q2Y";
-
+    
         // --- State Management ---
         let selectedTiles = {}; // Key: tileId (z14/z17), Value: { name, sw, ne, selected, uniqueId }
         let selectedTileOrder = []; // Order of selection
         let gridDisplayZoomLevel = 14; // Current grid/selection level
         let nextTileUniqueId = 1; // Counter for persistent IDs
         let currentPopup = null; // Reference to the currently open MapLibre popup
-
+    
         // --- Map Initialization ---
         const map = new maplibregl.Map({
             container: 'map',
@@ -392,18 +391,17 @@ if (savedConsent === 'granted') {
             center: [6.149183284512431, 45.8999526477542],
             zoom: 12 // User's initial zoom
         });
-
+    
         // --- Add Map Controls ---
         map.addControl(new maplibregl.NavigationControl(), 'top-left');
         map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
-        // Use MapLibre's GeolocateControl
         const geolocate = new maplibregl.GeolocateControl({
-             positionOptions: { enableHighAccuracy: true },
-             trackUserLocation: false, // Set true to continuously track
-             showUserHeading: true
+                positionOptions: { enableHighAccuracy: true },
+                trackUserLocation: false,
+                showUserHeading: true
         });
         map.addControl(geolocate, 'top-left');
-
+    
         // --- Calculation Functions ---
         function deg2rad(d) { return d * Math.PI / 180; }
         function rad2deg(r) { return r * 180 / Math.PI; }
@@ -411,72 +409,52 @@ if (savedConsent === 'granted') {
         function xTileToLonDeg(x, z) { const n = Math.pow(2, z); return x / n * 360.0 - 180.0; }
         function lonDegToXTile(lon, z) { const n = Math.pow(2, z); const xTile = Math.floor((lon + 180) / 360 * n); return (lon === 180) ? n - 1 : xTile; }
         function latDegToYTile(lat, z) { const n = Math.pow(2, z); const latClamped = Math.max(-85.05112878, Math.min(85.05112878, lat)); const latRad = deg2rad(latClamped); const yTile = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n); return (yTile >= n) ? n - 1 : yTile; }
-
+    
         function getTileBounds(x, y, z) {
             const lat_ne = yTileToLatDeg(y, z);
             const lon_sw = xTileToLonDeg(x, z);
             const lat_sw = yTileToLatDeg(y + 1, z);
             const lon_ne = xTileToLonDeg(x + 1, z);
-            // Return simple structure, Leaflet bounds object no longer needed
             return { sw: [lat_sw, lon_sw], ne: [lat_ne, lon_ne] };
         }
         function generateTileId(x, y, z) { return `z${z}-${x}-${y}`; }
-
+    
         // --- Geometry Helper: Point-in-Polygon (PIP) Test ---
-        /**
-         * Determines if a point is inside a polygon using the Ray Casting algorithm.
-         * The polygon boundary must be an array of [lon, lat] pairs.
-         * @param {number[]} point [lon, lat]
-         * @param {number[][]} polygon An array of [lon, lat] coordinates forming the polygon ring.
-         * @returns {boolean} True if the point is inside the polygon.
-         */
-         function isPointInPolygon(point, polygon) {
-             const x = point[0], y = point[1];
-             let inside = false;
-            
-             // Loop through each edge of the polygon
-             for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-                 const xi = polygon[i][0], yi = polygon[i][1];
-                 const xj = polygon[j][0], yj = polygon[j][1];
-
-                 // Check for intersections with a ray extending right from the point
-                 const intersect = ((yi > y) !== (yj > y)) && 
-                                   (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-                
-                 if (intersect) inside = !inside;
-             }
-             return inside;
-         }
-
+        function isPointInPolygon(point, polygon) {
+            const x = point[0], y = point[1];
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i][0], yi = polygon[i][1];
+                const xj = polygon[j][0], yj = polygon[j][1];
+                const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+    
         // --- GeoJSON Generation ---
-        // Function to generate GeoJSON for grid lines
         function generateGridGeoJson(bounds, displayZ) {
             const features = [];
             const tileCountZ = Math.pow(2, displayZ);
             const degPerTileLonZ = 360 / tileCountZ;
-
             const west = bounds.getWest(); const east = bounds.getEast();
             const south = bounds.getSouth(); const north = bounds.getNorth();
-
-            // Vertical lines (Longitude)
+    
             const kMinLon = Math.floor((west + 180) / degPerTileLonZ);
             const kMaxLon = Math.ceil((east + 180) / degPerTileLonZ);
             for (let k = kMinLon; k <= kMaxLon; k++) {
                 const lon = xTileToLonDeg(k, displayZ);
-                // Create LineString feature: [[lon, south], [lon, north]] (Lon, Lat order)
                 features.push({
                     type: 'Feature',
                     geometry: { type: 'LineString', coordinates: [[lon, south], [lon, north]] },
                     properties: {}
                 });
             }
-            // Horizontal lines (Latitude)
             const yMin = latDegToYTile(north, displayZ);
             const yMax = latDegToYTile(south, displayZ);
             for (let y = yMin; y <= yMax + 1; y++) {
                 const lat = yTileToLatDeg(y, displayZ);
-                 // Create LineString feature: [[west, lat], [east, lat]] (Lon, Lat order)
-                 features.push({
+                features.push({
                     type: 'Feature',
                     geometry: { type: 'LineString', coordinates: [[west, lat], [east, lat]] },
                     properties: {}
@@ -484,8 +462,7 @@ if (savedConsent === 'granted') {
             }
             return { type: 'FeatureCollection', features: features };
         }
-
-        // Function to generate GeoJSON for selected tile highlights
+    
         function generateHighlightGeoJson() {
             const features = [];
             selectedTileOrder.forEach(tileId => {
@@ -493,119 +470,87 @@ if (savedConsent === 'granted') {
                 if (tile && tile.selected && tile.sw && tile.ne) {
                     const minLat = tile.sw[0]; const minLon = tile.sw[1];
                     const maxLat = tile.ne[0]; const maxLon = tile.ne[1];
-                    // Create Polygon feature: needs closed loop in [Lon, Lat] order
                     const coordinates = [
                         [ [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat] ]
                     ];
                     features.push({
                         type: 'Feature',
                         geometry: { type: 'Polygon', coordinates: coordinates },
-                        properties: { tileId: tileId } // Include ID if needed later
+                        properties: { tileId: tileId }
                     });
                 }
             });
             return { type: 'FeatureCollection', features: features };
         }
-
-
-        // --- Grid Drawing Function (MapLibre) ---
+    
+        // --- Drawing Functions ---
         function drawGrid() {
             const currentZoom = map.getZoom();
             const source = map.getSource('grid-source');
-
-            if (currentZoom >= MIN_GRID_ZOOM - 0.5) { // Use threshold slightly below integer zoom
-                // Use MapLibre's getBounds()
+            if (currentZoom >= MIN_GRID_ZOOM - 0.5) {
                 const bounds = map.getBounds();
                 const geojsonData = generateGridGeoJson(bounds, gridDisplayZoomLevel);
-
                 if (source) {
-                    source.setData(geojsonData); // Update existing source
-                } else if (map.isStyleLoaded()) { // Check if style is loaded before adding
+                    source.setData(geojsonData);
+                } else if (map.isStyleLoaded()) {
                     map.addSource('grid-source', { type: 'geojson', data: geojsonData });
                     map.addLayer({
                         id: 'grid-layer',
                         type: 'line',
                         source: 'grid-source',
-                        paint: {
-                            'line-color': '#FF0000',
-                            'line-width': 0.5,
-                            'line-opacity': 0.6
-                        }
+                        paint: { 'line-color': '#FF0000', 'line-width': 0.5, 'line-opacity': 0.6 }
                     });
                 }
-                 // Make sure layer is visible if it exists
-                 if(map.getLayer('grid-layer')) { map.setLayoutProperty('grid-layer', 'visibility', 'visible');}
-
+                if(map.getLayer('grid-layer')) { map.setLayoutProperty('grid-layer', 'visibility', 'visible');}
             } else {
-                 // Hide grid layer if below zoom threshold
-                 if(map.getLayer('grid-layer')) { map.setLayoutProperty('grid-layer', 'visibility', 'none');}
+                if(map.getLayer('grid-layer')) { map.setLayoutProperty('grid-layer', 'visibility', 'none');}
             }
         }
-
-        // --- Selected Tile Highlighting (MapLibre) ---
+    
         function redrawSelectedHighlights() {
             const source = map.getSource('highlight-source');
             const geojsonData = generateHighlightGeoJson();
-
             if (source) {
-                source.setData(geojsonData); // Update existing source
-            } else if (map.isStyleLoaded()) { // Check if style is loaded
+                source.setData(geojsonData);
+            } else if (map.isStyleLoaded()) {
                 map.addSource('highlight-source', { type: 'geojson', data: geojsonData });
-                // Add Fill layer
                 map.addLayer({
                     id: 'highlight-fill-layer',
                     type: 'fill',
                     source: 'highlight-source',
-                    paint: {
-                        'fill-color': '#007bff',
-                        'fill-opacity': 0.3
-                    }
+                    paint: { 'fill-color': '#007bff', 'fill-opacity': 0.3 }
                 });
-                // Add Outline layer
-                 map.addLayer({
+                map.addLayer({
                     id: 'highlight-outline-layer',
                     type: 'line',
                     source: 'highlight-source',
-                    paint: {
-                        'line-color': '#0056b3',
-                        'line-width': 1
-                    }
+                    paint: { 'line-color': '#0056b3', 'line-width': 1 }
                 });
             }
         }
-
-        // --- KML Parsing and Drawing ---
-        const visitedTiles = {}; // Stores all unique tile IDs from the KML
-       
+    
+        const visitedTiles = {};
         function drawVisitedHighlights() {
             const features = [];
-            // Convert each stored tile ID back into a GeoJSON Polygon feature
             Object.keys(visitedTiles).forEach(tileId => {
-                const parts = tileId.split('-'); // e.g., 'z14-200-100'
+                const parts = tileId.split('-');
                 const z = parseInt(parts[0].substring(1));
                 const x = parseInt(parts[1]);
                 const y = parseInt(parts[2]);
-               
                 const tileBounds = getTileBounds(x, y, z);
-               
                 const minLat = tileBounds.sw[0]; const minLon = tileBounds.sw[1];
                 const maxLat = tileBounds.ne[0]; const maxLon = tileBounds.ne[1];
-               
-                const coordinates = [
-                    [ [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat] ]
-                ];
-               
+                const coordinates = [[ [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat] ]];
                 features.push({
                     type: 'Feature',
                     geometry: { type: 'Polygon', coordinates: coordinates },
                     properties: { tileId: tileId }
                 });
             });
-           
+            
             const geojsonData = { type: 'FeatureCollection', features: features };
-
             const source = map.getSource('visited-source');
-
+    
             if (source) {
                 source.setData(geojsonData);
             } else if (map.isStyleLoaded()) {
@@ -614,158 +559,120 @@ if (savedConsent === 'granted') {
                     id: 'visited-fill-layer',
                     type: 'fill',
                     source: 'visited-source',
-                    paint: {
-                        // Color: Light Gray (e.g., #808080) with 60% opacity
-                        'fill-color': '#808080', 
-                        'fill-opacity': 0.6 
-                    }
-                    // **FIXED**: Removed 'before: 'highlight-fill-layer'' which caused an error
-                    // because 'highlight-fill-layer' doesn't exist on initial load.
-                    // Layers are added in order, so this will now appear correctly
-                    // underneath the highlight layer when it's created later.
+                    paint: { 'fill-color': '#808080', 'fill-opacity': 0.6 }
                 });
             }
         }
-
-
+    
         function parseKML(kmlText) {
             console.log("Starting KML parsing...");
             const parser = new DOMParser();
             const kmlDoc = parser.parseFromString(kmlText, "text/xml");
-           
-            // Check for KML parsing errors
+            
             if (kmlDoc.getElementsByTagName("parsererror").length > 0) {
                 console.error("KML Parse Error:", kmlDoc.getElementsByTagName("parsererror")[0].textContent);
-                alert("Error parsing KML file. Please ensure it is a valid KML structure.");
+                alert("Error parsing KML file.");
                 return;
             }
-
+    
             const coordinatesElements = kmlDoc.getElementsByTagName('coordinates');
-           
             if (coordinatesElements.length === 0) {
                 alert("Could not find any <coordinates> data in the KML file.");
-                return;
-            }
-
-            // Clear previous visited tiles
-            Object.keys(visitedTiles).forEach(key => delete visitedTiles[key]); 
-
-            // Process the first polygon found (assuming it contains all visited area)
-            // The polygon ring should be Lon,Lat pairs.
-            const coordsText = coordinatesElements[0].textContent.trim();
-            if (!coordsText) { 
-                alert("The first coordinate block is empty.");
-                return;
-            }
-
-            // Format polygon for PIP test: array of [lon, lat] points
-            const polygon = coordsText.split(/\s+/).map(p => {
-                const parts = p.split(',');
-                // KML coordinates are Lon, Lat, (Altitude)
-                return [parseFloat(parts[0]), parseFloat(parts[1])]; 
-            });
-           
-            if (polygon.length < 4) { // Need at least 4 points to form a closed polygon
-                 alert("The KML polygon is too small or improperly formed.");
-                 return;
-            }
-
-            // Calculate **TRUE** bounding box for iteration efficiency
-            let minLon = polygon[0][0], maxLon = polygon[0][0];
-            let minLat = polygon[0][1], maxLat = polygon[0][1];
-            polygon.forEach(p => {
-                minLon = Math.min(minLon, p[0]);
-                maxLon = Math.max(maxLon, p[0]);
-                minLat = Math.min(minLat, p[1]);
-                maxLat = Math.max(maxLat, p[1]);
-            });
-
-            // --- Iteration Logic ---
-            // Process both Z14 and Z17 levels
-
-            [14, 17].forEach(z => {
-                const minX = lonDegToXTile(minLon, z);
-                const maxX = lonDegToXTile(maxLon, z);
-                const minY = latDegToYTile(maxLat, z);
-                const maxY = latDegToYTile(minLat, z);
-
-                // Iterate only over tiles within the bounding box
-                for (let x = minX; x <= maxX; x++) {
-                    for (let y = minY; y <= maxY; y++) {
-                        const tileId = generateTileId(x, y, z);
-                        const bounds = getTileBounds(x, y, z);
-                       
-                        // Calculate tile center (midpoint of NE and SW corners)
-                        const centerLon = (bounds.sw[1] + bounds.ne[1]) / 2;
-                        const centerLat = (bounds.sw[0] + bounds.ne[0]) / 2;
-                        const tileCenter = [centerLon, centerLat];
-                       
-                        // **CRITICAL FIX: Check if the tile center is inside the KML polygon**
-                        if (isPointInPolygon(tileCenter, polygon)) {
-                            visitedTiles[tileId] = true;
-                        }
+                // Do not return yet, so debug tiles can be shown.
+            } else {
+                Object.keys(visitedTiles).forEach(key => delete visitedTiles[key]); 
+                const coordsText = coordinatesElements[0].textContent.trim();
+                if (coordsText) {
+                    const polygon = coordsText.split(/\s+/).map(p => {
+                        const parts = p.split(',');
+                        return [parseFloat(parts[0]), parseFloat(parts[1])]; 
+                    });
+                
+                    if (polygon.length >= 4) {
+                        let minLon = polygon[0][0], maxLon = polygon[0][0];
+                        let minLat = polygon[0][1], maxLat = polygon[0][1];
+                        polygon.forEach(p => {
+                            minLon = Math.min(minLon, p[0]);
+                            maxLon = Math.max(maxLon, p[0]);
+                            minLat = Math.min(minLat, p[1]);
+                            maxLat = Math.max(maxLat, p[1]);
+                        });
+    
+                        [14, 17].forEach(z => {
+                            const minX = lonDegToXTile(minLon, z);
+                            const maxX = lonDegToXTile(maxLon, z);
+                            const minY = latDegToYTile(maxLat, z);
+                            const maxY = latDegToYTile(minLat, z);
+                            for (let x = minX; x <= maxX; x++) {
+                                for (let y = minY; y <= maxY; y++) {
+                                    const tileId = generateTileId(x, y, z);
+                                    const bounds = getTileBounds(x, y, z);
+                                    const centerLon = (bounds.sw[1] + bounds.ne[1]) / 2;
+                                    const centerLat = (bounds.sw[0] + bounds.ne[0]) / 2;
+                                    const tileCenter = [centerLon, centerLat];
+                                    if (isPointInPolygon(tileCenter, polygon)) {
+                                        visitedTiles[tileId] = true;
+                                    }
+                                }
+                            }
+                        });
                     }
                 }
-            });
-
-
+            }
+            
+            // --- DEBUGGING: Manually add some tiles for Annecy city center ---
+            // This is to test if the drawing function works, regardless of KML content.
+            console.log("Adding debug tiles for Annecy.");
+            // A 2x2 grid at Zoom 14 (Tiles/Squadrats view)
+            visitedTiles['z14-8470-5810'] = true;
+            visitedTiles['z14-8471-5810'] = true;
+            visitedTiles['z14-8470-5811'] = true;
+            visitedTiles['z14-8471-5811'] = true;
+            // A 2x2 grid at Zoom 17 (Squadratinhos view)
+            visitedTiles['z17-67760-46480'] = true;
+            visitedTiles['z17-67761-46480'] = true;
+            visitedTiles['z17-67760-46481'] = true;
+            visitedTiles['z17-67761-46481'] = true;
+            // --- END DEBUGGING ---
+    
             const tileCount = Object.keys(visitedTiles).length;
-            console.log(`Successfully parsed KML. Found ${tileCount} unique tiles.`);
+            console.log(`Successfully parsed KML. Total tiles to draw: ${tileCount}`);
             drawVisitedHighlights();
             pingAnalytics('kml_imported');
-            alert(`KML imported! ${tileCount} unique tiles loaded.`);
+            alert(`KML imported! ${tileCount} tiles loaded for display.`);
         }        
-       
+        
         // --- Analytics Ping ---
-        function pingAnalytics(eventName) { // Changed parameter name for clarity
+        function pingAnalytics(eventName) {
             const savedConsent = localStorage.getItem('user_consent_analytics_v1');
             if (savedConsent !== 'granted') {
                 console.log("Analytics consent not granted, skipping MP ping.");
-                return Promise.resolve(); // Don't ping if no consent
+                return Promise.resolve();
             }
-
-            // --- Add client_id ---
             let clientId = localStorage.getItem('tileiq_mp_client_id');
             if (!clientId) {
-                // Generate a simple pseudo-unique ID if one doesn't exist
                 clientId = Date.now() + '.' + Math.random().toString(36).substring(2);
                 localStorage.setItem('tileiq_mp_client_id', clientId);
-                console.log("Generated new MP client_id:", clientId);
             }
-            // --- End: Add client_id ---
-
-
             return new Promise((resolve) => {
                 const url = 'https://www.google-analytics.com/mp/collect?measurement_id=G-MP2YQKFTLE&api_secret=yiKj-8dKTVuW4OtzNR-QmQ';
                 const payload = {
-                    client_id: clientId, // Include the client_id here
-                    events: [{
-                        name: eventName, // Use the event name passed to the function
-                        params: {} // Add any relevant parameters if needed later
-                    }],
+                    client_id: clientId,
+                    events: [{ name: eventName, params: {} }],
                 };
-
-                console.log("Pinging Analytics with payload:", JSON.stringify(payload)); // Log the payload
-
-                fetch(url, {
-                    method: 'POST',
-                    body: JSON.stringify(payload),
-                })
+                fetch(url, { method: 'POST', body: JSON.stringify(payload) })
                 .then(response => {
-                    // Log the response status for debugging
-                    if (!response.ok && response.status !== 204) { // 204 is ok
-                       console.error(`Analytics ping failed with status: ${response.status}`);
-                    }
-                     resolve(response);
+                    if (!response.ok && response.status !== 204) { console.error(`Analytics ping failed with status: ${response.status}`); }
+                    resolve(response);
                 })
                 .catch(error => {
                     console.error(`Error pinging Analytics for '${eventName}':`, error);
-                    resolve(); // Resolve even on fetch error to not block other code
+                    resolve();
                 });
             });
         }
-       
-        // --- Update Output String Display ---
+        
+        // --- UI and State Update Functions ---
         function updateOutputString() {
             const outputElement = document.getElementById('outputString');
             if (!outputElement) return;
@@ -783,253 +690,176 @@ if (savedConsent === 'granted') {
                     const label = tile.name || 'Unnamed';
                     const itemString = `${tile.uniqueId}^${label}^${lon_sw}^${lat_sw}^${lon_ne}^${lat_ne}`;
                     outputItems.push(itemString);
-                } else if (tile && tile.selected) { console.warn(`Tile ${tileId} selected but missing uniqueId!`); }
+                }
             });
-            const outputString = outputItems.join('|');
-            outputElement.value = outputString;
+            outputElement.value = outputItems.join('|');
         }
-
-
-        // --- Interaction Functions ---
+    
         function saveTileName(tileId) {
             const inputElement = document.getElementById('tileNameInput_' + tileId);
-            const tileName = inputElement ? inputElement.value.trim() : '';
-            tilename = tileName.replaceAll(/[\|\^]/g, ''); 
+            const tileName = inputElement ? inputElement.value.trim().replaceAll(/[\|\^]/g, '') : '';
             const tileData = selectedTiles[tileId];
-            if (!tileData.hasOwnProperty('uniqueId')) { tileData.uniqueId = nextTileUniqueId++; console.log(`Assigned uniqueId ${tileData.uniqueId} to ${tileId}`); }
-            if (!selectedTileOrder.includes(tileId)) { selectedTileOrder.push(tileId); console.log('Added to order:', tileId); }
             if (!tileData) { console.error("Could not find tile data for ID:", tileId); if (currentPopup) { currentPopup.remove(); } return; }
-            tileData.name = tileName.replaceAll(/[\|\^]/g, '') || "Tile_" + tileData.uniqueId;
+            if (!tileData.hasOwnProperty('uniqueId')) { tileData.uniqueId = nextTileUniqueId++; }
+            if (!selectedTileOrder.includes(tileId)) { selectedTileOrder.push(tileId); }
+            tileData.name = tileName || "Tile_" + tileData.uniqueId;
             tileData.selected = true;
-            if (currentPopup) { currentPopup.remove(); } // Close popup
+            if (currentPopup) { currentPopup.remove(); }
             redrawSelectedHighlights();
             updateOutputString();
             pingAnalytics('save_tile');
         }
-
+    
         function deselectTile(tileId) {
-             if (selectedTiles[tileId]) {
-                 selectedTiles[tileId].selected = false;
-                 const index = selectedTileOrder.indexOf(tileId);
-                 if (index > -1) { selectedTileOrder.splice(index, 1); console.log('Removed from order:', tileId); }
-                 if (currentPopup) { currentPopup.remove(); } // Close popup
-                 redrawSelectedHighlights();
-                 updateOutputString();
-             }
-         }
-
-        function openNamingPopup(tileId, lngLat, tileBoundsData) { // lngLat is MapLibre LngLat object
-             // Close previous popup if open
-             if (currentPopup) { currentPopup.remove(); }
-
-             const currentData = selectedTiles[tileId];
-             const currentName = currentData?.name || '';
-             const isSelected = currentData?.selected || false;
-
-             // Ensure data exists, using bounds passed from click handler
-             if (!currentData) {
-                  selectedTiles[tileId] = { name: '', sw: tileBoundsData.sw, ne: tileBoundsData.ne, selected: false };
-             } else {
-                  // Update coords just in case, though unlikely to change for a given tile ID
-                    selectedTiles[tileId].sw = tileBoundsData.sw;
-                    selectedTiles[tileId].ne = tileBoundsData.ne;
-             }
-
-             const popupContentDiv = document.createElement('div');
-             popupContentDiv.className = 'naming-popup-content'; // Add class for styling
-
-             let buttonsHTML = `<button onclick="saveTileName('${tileId}')">Save Name</button>`;
-             if (isSelected) {
-                 buttonsHTML += `<button class="deselect-button" onclick="deselectTile('${tileId}')">Deselect</button>`;
-             }
-
-             popupContentDiv.innerHTML = `<b>Name this tile:</b><br>
-                                       <input type="text" id="tileNameInput_${tileId}" placeholder="Enter name..." value="${currentName}">
-                                       <div>${buttonsHTML}</div>`; // Wrap buttons in div if needed
-
-             currentPopup = new maplibregl.Popup({ closeOnClick: true, closeButton: true, maxWidth: '240px' }) // Adjust max width
-                 .setLngLat(lngLat) // Use MapLibre LngLat object or [lon, lat] array
-                 .setDOMContent(popupContentDiv) // Use setDOMContent for interactive elements
-                 .addTo(map);
-
-             // Focus input after popup is potentially opened
-             setTimeout(() => {
-                 const input = document.getElementById('tileNameInput_' + tileId);
-                 if (input) { input.focus(); input.select(); }
-             }, 100); // Timeout might need adjustment
-         }
-
-
-        // --- Custom KML Upload Control (MapLibre) ---
+                if (selectedTiles[tileId]) {
+                    selectedTiles[tileId].selected = false;
+                    const index = selectedTileOrder.indexOf(tileId);
+                    if (index > -1) { selectedTileOrder.splice(index, 1); }
+                    if (currentPopup) { currentPopup.remove(); }
+                    redrawSelectedHighlights();
+                    updateOutputString();
+                }
+            }
+    
+        function openNamingPopup(tileId, lngLat, tileBoundsData) {
+            if (currentPopup) { currentPopup.remove(); }
+            const currentData = selectedTiles[tileId];
+            const currentName = currentData?.name || '';
+            const isSelected = currentData?.selected || false;
+            if (!currentData) {
+                selectedTiles[tileId] = { name: '', sw: tileBoundsData.sw, ne: tileBoundsData.ne, selected: false };
+            } else {
+                selectedTiles[tileId].sw = tileBoundsData.sw;
+                selectedTiles[tileId].ne = tileBoundsData.ne;
+            }
+            const popupContentDiv = document.createElement('div');
+            popupContentDiv.className = 'naming-popup-content';
+            let buttonsHTML = `<button onclick="saveTileName('${tileId}')">Save Name</button>`;
+            if (isSelected) {
+                buttonsHTML += `<button class="deselect-button" onclick="deselectTile('${tileId}')">Deselect</button>`;
+            }
+            popupContentDiv.innerHTML = `<b>Name this tile:</b><br><input type="text" id="tileNameInput_${tileId}" placeholder="Enter name..." value="${currentName}"><div>${buttonsHTML}</div>`;
+            currentPopup = new maplibregl.Popup({ closeOnClick: true, closeButton: true, maxWidth: '240px' })
+                .setLngLat(lngLat)
+                .setDOMContent(popupContentDiv)
+                .addTo(map);
+            setTimeout(() => {
+                const input = document.getElementById('tileNameInput_' + tileId);
+                if (input) { input.focus(); input.select(); }
+            }, 100);
+        }
+    
+        // --- Custom Map Controls ---
         class KmlUploadControl {
             onAdd(mapInstance) {
                 this._map = mapInstance;
                 this._container = document.createElement('div');
                 this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group maplibregl-ctrl-kml-upload';
                 this._container.title = 'Upload KML from squadrats.com';
-               
-                // HTML structure
-                this._container.innerHTML = `
-                    <input type="file" id="kml-upload-input" accept=".kml">
-                    <span class="label">Upload KML from squadrats.com</span>
-                    <span class="flag">NEW</span>
-                `;
-
-                // Add event listener (using logic defined below)
+                this._container.innerHTML = `<input type="file" id="kml-upload-input" accept=".kml"><span class="label">Upload KML</span><span class="flag">NEW</span>`;
                 this._input = this._container.querySelector('#kml-upload-input');
                 this._input.addEventListener('change', this.handleFileChange.bind(this));
-               
                 return this._container;
             }
-
             onRemove() {
                 this._input.removeEventListener('change', this.handleFileChange);
                 this._container.parentNode.removeChild(this._container);
                 this._map = undefined;
             }
-
             handleFileChange(event) {
                 const file = event.target.files[0];
                 if (file) {
                     const reader = new FileReader();
-                    reader.onload = (e) => {
-                        parseKML(e.target.result); // Use existing global parseKML function
-                    };
-                    reader.onerror = (e) => {
-                        console.error("Error reading file:", e);
-                        alert("Error reading file. Please try again.");
-                    };
+                    reader.onload = (e) => parseKML(e.target.result);
+                    reader.onerror = (e) => alert("Error reading file.");
                     reader.readAsText(file);
                 }
-                // Reset the file input so the same file can be uploaded again
                 event.target.value = '';
             }
         }
-
-        // --- Custom Grid Toggle Control (MapLibre) ---
+    
         class GridToggleControl {
-             onAdd(mapInstance) {
-                 this._map = mapInstance;
-                 this._container = document.createElement('div');
-                 this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group maplibregl-ctrl-grid-toggle'; // Use MapLibre classes + custom one
-
-                 const spanZ14 = document.createElement('span');
-                 const spanZ17 = document.createElement('span');
-                 spanZ14.id = 'toggle-z14'; spanZ14.textContent = 'Tiles/Squadrats';
-                 spanZ17.id = 'toggle-z17'; spanZ17.textContent = 'Squadratinhos';
-
-                 this._container.appendChild(spanZ14);
-                 this._container.appendChild(spanZ17);
-
-                 // Set initial active state
-                 this.updateActiveState(spanZ14, spanZ17);
-
-                 // Add event listeners
-                 spanZ14.addEventListener('click', () => {
-                     if (gridDisplayZoomLevel !== 14) {
-                         gridDisplayZoomLevel = 14;
-                         this.updateActiveState(spanZ14, spanZ17);
-                         drawGrid(); // Redraw grid
-                     }
-                 });
-                 spanZ17.addEventListener('click', () => {
-                     if (gridDisplayZoomLevel !== 17) {
-                         gridDisplayZoomLevel = 17;
-                         this.updateActiveState(spanZ14, spanZ17);
-                         drawGrid(); // Redraw grid
-                     }
-                 });
-
-                 return this._container;
-             }
-
-             updateActiveState(spanZ14, spanZ17) {
-                 if (gridDisplayZoomLevel === 14) {
-                     spanZ14.classList.add('active');
-                     spanZ17.classList.remove('active');
-                 } else {
-                     spanZ17.classList.add('active');
-                     spanZ14.classList.remove('active');
-                 }
-             }
-
-             onRemove() {
-                 this._container.parentNode.removeChild(this._container);
-                 this._map = undefined;
-             }
-         }
-         // Add the custom control
+            onAdd(mapInstance) {
+                this._map = mapInstance;
+                this._container = document.createElement('div');
+                this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group maplibregl-ctrl-grid-toggle';
+                const spanZ14 = document.createElement('span');
+                const spanZ17 = document.createElement('span');
+                spanZ14.id = 'toggle-z14'; spanZ14.textContent = 'Tiles/Squadrats';
+                spanZ17.id = 'toggle-z17'; spanZ17.textContent = 'Squadratinhos';
+                this._container.appendChild(spanZ14);
+                this._container.appendChild(spanZ17);
+                this.updateActiveState(spanZ14, spanZ17);
+                spanZ14.addEventListener('click', () => {
+                    if (gridDisplayZoomLevel !== 14) {
+                        gridDisplayZoomLevel = 14;
+                        this.updateActiveState(spanZ14, spanZ17);
+                        drawGrid();
+                    }
+                });
+                spanZ17.addEventListener('click', () => {
+                    if (gridDisplayZoomLevel !== 17) {
+                        gridDisplayZoomLevel = 17;
+                        this.updateActiveState(spanZ14, spanZ17);
+                        drawGrid();
+                    }
+                });
+                return this._container;
+            }
+            updateActiveState(spanZ14, spanZ17) {
+                if (gridDisplayZoomLevel === 14) {
+                    spanZ14.classList.add('active');
+                    spanZ17.classList.remove('active');
+                } else {
+                    spanZ17.classList.add('active');
+                    spanZ14.classList.remove('active');
+                }
+            }
+            onRemove() {
+                this._container.parentNode.removeChild(this._container);
+                this._map = undefined;
+            }
+        }
         map.addControl(new KmlUploadControl(), 'bottom-left');
         map.addControl(new GridToggleControl(), 'bottom-left');
-
+    
         // --- Map Event Listeners ---
         map.on('load', () => {
-             console.log('Map style loaded.');
-             // It's safer to add sources/layers and redraw highlights/grid here
-             // in case they were called before the style finished loading initially.
-             redrawSelectedHighlights(); // Draw initial highlights if any
-             drawGrid(); // Draw initial grid
+            redrawSelectedHighlights();
+            drawGrid();
         });
-
-        map.on('moveend', drawGrid); // Update grid on move end
-        map.on('zoomend', drawGrid); // Update grid on zoom end
-
-
-        // Map Click Handler (MapLibre)
+        map.on('moveend', drawGrid);
+        map.on('zoomend', drawGrid);
         map.on('click', (e) => {
-            // Don't trigger tile selection if clicking on a control (like geolocate)
-             if (e.originalEvent.target.closest('.maplibregl-ctrl')) {
-                 return;
-             }
-
-             const lon = e.lngLat.lng;
-             const lat = e.lngLat.lat;
-
-             const currentSelectionZoom = gridDisplayZoomLevel;
-             const tileX = lonDegToXTile(lon, currentSelectionZoom);
-             const tileY = latDegToYTile(lat, currentSelectionZoom);
-             const tileId = generateTileId(tileX, tileY, currentSelectionZoom);
-             const tileBoundsData = getTileBounds(tileX, tileY, currentSelectionZoom); // Get {sw, ne}
-
-             openNamingPopup(tileId, e.lngLat, tileBoundsData); // Pass MapLibre LngLat object
+            if (e.originalEvent.target.closest('.maplibregl-ctrl')) return;
+            const currentSelectionZoom = gridDisplayZoomLevel;
+            const tileX = lonDegToXTile(e.lngLat.lng, currentSelectionZoom);
+            const tileY = latDegToYTile(e.lngLat.lat, currentSelectionZoom);
+            const tileId = generateTileId(tileX, tileY, currentSelectionZoom);
+            const tileBoundsData = getTileBounds(tileX, tileY, currentSelectionZoom);
+            openNamingPopup(tileId, e.lngLat, tileBoundsData);
         });
-
-
-        // --- Copy Button Logic ---
-        const copyButton = document.getElementById('copyButton');
-        const outputTextArea = document.getElementById('outputString');
-        if (copyButton && outputTextArea) {
-            /* ... No changes needed here ... */
-            copyButton.addEventListener('click', () => {
-                const textToCopy = outputTextArea.value;
-                if (!textToCopy) {
-                    return;
-                }
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(textToCopy).then(() => {
-                        const originalText = copyButton.textContent;
-                        copyButton.textContent = 'Copied!';
-                        copyButton.classList.add('copied');
-                        pingAnalytics('copied_tiles');
-                        setTimeout(() => {
-                            copyButton.textContent = originalText;
-                            copyButton.classList.remove('copied');
-                        }, 1500);
-                    }).catch(err => {
-                        console.error('Failed to copy text: ', err);
-                        alert('Failed to copy text.');
-                    });
-                } else {
-                    console.warn('Clipboard API not available.');
-                    alert('Copying failed. Please copy manually.');
-                }
-            });
-        }
-
-        // --- Initial Draw Call (After map setup) ---
-        // Note: Drawing now primarily happens after 'load' event for layers
-        updateOutputString(); // Update output display initially
-
+    
+        // --- Final Setup ---
+        document.getElementById('copyButton').addEventListener('click', () => {
+            const outputTextArea = document.getElementById('outputString');
+            const textToCopy = outputTextArea.value;
+            if (!textToCopy) return;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    const copyButton = document.getElementById('copyButton');
+                    const originalText = copyButton.textContent;
+                    copyButton.textContent = 'Copied!';
+                    copyButton.classList.add('copied');
+                    pingAnalytics('copied_tiles');
+                    setTimeout(() => {
+                        copyButton.textContent = originalText;
+                        copyButton.classList.remove('copied');
+                    }, 1500);
+                }).catch(err => alert('Failed to copy text.'));
+            }
+        });
+        updateOutputString();
     </script>
 
 </body>
