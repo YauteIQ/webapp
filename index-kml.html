@@ -606,22 +606,13 @@ if (savedConsent === 'granted') {
 
             const source = map.getSource('visited-source');
 
+            // CRITICAL FIX: The source is guaranteed to exist now, just update data
             if (source) {
                 source.setData(geojsonData);
-            } else if (map.isStyleLoaded()) {
-                map.addSource('visited-source', { type: 'geojson', data: geojsonData });
-                map.addLayer({
-                    id: 'visited-fill-layer',
-                    type: 'fill',
-                    source: 'visited-source',
-                    paint: {
-                        // Color: Light Gray (e.g., #808080) with 60% opacity
-                        'fill-color': '#808080', 
-                        'fill-opacity': 0.6 
-                    },
-                    // Place below the highlight layers
-                    before: 'highlight-fill-layer' 
-                });
+                console.log("Updated visited-source data.");
+            } else {
+                // Should not happen, but a fallback log
+                console.error("Visited source not found, Map style not loaded in time.");
             }
         }
 
@@ -983,10 +974,30 @@ if (savedConsent === 'granted') {
         // --- Map Event Listeners ---
         map.on('load', () => {
              console.log('Map style loaded.');
-             // It's safer to add sources/layers and redraw highlights/grid here
-             // in case they were called before the style finished loading initially.
-             redrawSelectedHighlights(); // Draw initial highlights if any
-             drawGrid(); // Draw initial grid
+             
+             // 1. Initialize Visited Layers (with empty GeoJSON)
+             // This ensures the source and layer are ready for later data injection from KML upload
+             map.addSource('visited-source', { 
+                 type: 'geojson', 
+                 data: { type: 'FeatureCollection', features: [] } 
+             });
+             map.addLayer({
+                 id: 'visited-fill-layer',
+                 type: 'fill',
+                 source: 'visited-source',
+                 paint: {
+                     'fill-color': '#808080', 
+                     'fill-opacity': 0.6 
+                 },
+                 // Place this new layer below the selectable highlights
+                 before: 'highlight-fill-layer' 
+             });
+
+             // 2. Initialize Selection Layers (now simpler, no need for map.isStyleLoaded() check)
+             redrawSelectedHighlights(); 
+             
+             // 3. Draw Grid
+             drawGrid(); 
         });
 
         map.on('moveend', drawGrid); // Update grid on move end
